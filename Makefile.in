@@ -1,0 +1,55 @@
+# Once compiled run with
+# for mpi:
+# mpirun -np 1 ./staggamma --grid 4.4.4.4 
+# for scalar:
+# ./staggamma --grid 4.4.4.4 
+
+# Installation prefix (configured by autoconf)
+prefix=@PREFIX@
+
+# Grid installation path (configured by autoconf)
+gridinstall=@GRID_PREFIX@
+config=$(gridinstall)/bin/grid-config
+
+# Compiler flags (configured by autoconf)
+DEBUGFLAGS=@DEBUGFLAGS@
+
+INCLUDES := -I../src/cpp # Manually specify include dirs
+#
+#  flags from the grid utility program
+#
+CXXFLAGS= $(shell $(config) --cxxflags) -I$(gridinstall)/include $(OPTFLAGS) $(DEBUGFLAGS) $(A2A_BLOCKING_FLAGS)
+LDFLAGS=$(shell $(config) --ldflags)
+LIBS= $(shell $(config) --libs) -L$(gridinstall)/lib -lGrid
+COMPILER=$(shell $(config) --cxx)
+
+# GPUFLAGS=
+# ifneq ($(DEBUGFLAGS),)
+# 	GPUFLAGS= -lineinfo -lnvToolsExt
+# endif
+
+.PHONY: all grid_lma clean distclean install
+
+# Default target
+all: grid_lma
+
+# Configure arguments (can be overridden on command line)
+CONFIGURE_ARGS ?=
+
+grid_lma: ../src/Grid_LMA.cc
+	$(COMPILER) $(INCLUDES) -o $@ $(GPUFLAGS) $(CXXFLAGS)  ../src/Grid_LMA.cc ../src/cpp/TimerArray.cc ../src/cpp/IO.cc  $(LDFLAGS) $(LIBS)
+
+install: grid_lma
+	install -d $(prefix)/bin
+	install -m 755 grid_lma $(prefix)/bin/
+
+clean:
+	rm -f grid_lma
+
+# Clean everything including configure-generated files
+distclean: clean
+	rm -f configure config.log config.status
+	rm -rf autom4te.cache
+	rm -f Makefile
+
+.PHONY: clean 
