@@ -1,0 +1,12 @@
+build-*
+install-*
+.clangd
+.cache
+.vscode
+
+# Autoconf generated files
+configure
+configure~
+config.log
+config.status
+autom4te.cache/
