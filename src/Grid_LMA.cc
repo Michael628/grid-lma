@@ -323,7 +323,8 @@ int main(int argc, char **argv) {
   };
 
   bool hasEigs = inputParams.epack.type != EpackPar::EpackType::undef;
-  bool hasSources = inputParams.sources.size() > 0;
+  bool hasSources =
+      inputParams.sources.size() > 0 && !inputParams.highModeActions.empty();
 
   std::shared_ptr<EigenPack<FermionFieldD>> epack;
 
@@ -331,62 +332,63 @@ int main(int argc, char **argv) {
     // IRL action parameters
     auto &epackPar = inputParams.epack;
 
-    epack = std::make_shared<EigenPack<FermionFieldD>>();
-    auto &actionParIRL = epackPar.action;
-
-    // ========================================================================
-    // MODULE: MSolver::StagFermionIRL (Run IRL eigensolver)
-    // ========================================================================
-    std::cout << GridLogMessage
-              << "\n========================================" << std::endl;
-    std::cout << GridLogMessage << "MODULE: MSolver::StagFermionIRL"
-              << std::endl;
-    std::cout << GridLogMessage
-              << "========================================" << std::endl;
-
-    auto &lanczosPar = epackPar.irl.lanczosParams;
-    const int Nstop = lanczosPar.Nstop;
-    const int Nk = lanczosPar.Nk;
-    const int Nm = lanczosPar.Nm;
-    const int MaxIt = lanczosPar.MaxIt;
-    RealD resid = lanczosPar.resid;
-
-    std::cout << GridLogMessage << "IRL Parameters:" << std::endl;
-    std::cout << GridLogMessage << "  Nstop = " << Nstop << std::endl;
-    std::cout << GridLogMessage << "  Nk = " << Nk << std::endl;
-    std::cout << GridLogMessage << "  Nm = " << Nm << std::endl;
-    std::cout << GridLogMessage << "  MaxIt = " << MaxIt << std::endl;
-    std::cout << GridLogMessage << "  resid = " << resid << std::endl;
-
-    std::shared_ptr<FermionOpD> stagMatIRL;
-    makeAction(stagMatIRL, actionParIRL);
-
-    // Create operators for IRL if needed
-    SchurStaggeredOperator<FermionOpD, FermionFieldD> hermOpIRL(*stagMatIRL);
-    Chebyshev<FermionFieldD> Cheby(
-        lanczosPar.Cheby.alpha, lanczosPar.Cheby.beta, lanczosPar.Cheby.Npoly);
-
-    FunctionHermOp<FermionFieldD> OpCheby(Cheby, hermOpIRL);
-    PlainHermOp<FermionFieldD> Op(hermOpIRL);
-
-    ImplicitlyRestartedLanczos<FermionFieldD> IRL(OpCheby, Op, Nstop, Nk, Nm,
-                                                  resid, MaxIt);
-
-    FermionFieldD src(UrbGrid);
     int cb = epackPar.checker;
 
-    std::cout << GridLogMessage
-              << "Generating random source (checkerboard = " << epackPar.checker
-              << ")" << std::endl;
-    FermionFieldD gauss(UGrid);
-    std::string seed = getSeed(inputParams, epackPar.seed);
-    rng.SeedUniqueString(seed);
-    gaussian(rng, gauss);
-    pickCheckerboard(cb, src, gauss);
-
-    epack->resize(epackPar.size, UrbGrid);
+    epack = std::make_shared<EigenPack<FermionFieldD>>();
 
     if (epackPar.type == EpackPar::EpackType::solve) {
+      auto &actionParIRL = epackPar.action;
+
+      // ========================================================================
+      // MODULE: MSolver::StagFermionIRL (Run IRL eigensolver)
+      // ========================================================================
+      std::cout << GridLogMessage
+                << "\n========================================" << std::endl;
+      std::cout << GridLogMessage << "MODULE: MSolver::StagFermionIRL"
+                << std::endl;
+      std::cout << GridLogMessage
+                << "========================================" << std::endl;
+
+      auto &lanczosPar = epackPar.irl.lanczosParams;
+      const int Nstop = lanczosPar.Nstop;
+      const int Nk = lanczosPar.Nk;
+      const int Nm = lanczosPar.Nm;
+      const int MaxIt = lanczosPar.MaxIt;
+      RealD resid = lanczosPar.resid;
+
+      std::cout << GridLogMessage << "IRL Parameters:" << std::endl;
+      std::cout << GridLogMessage << "  Nstop = " << Nstop << std::endl;
+      std::cout << GridLogMessage << "  Nk = " << Nk << std::endl;
+      std::cout << GridLogMessage << "  Nm = " << Nm << std::endl;
+      std::cout << GridLogMessage << "  MaxIt = " << MaxIt << std::endl;
+      std::cout << GridLogMessage << "  resid = " << resid << std::endl;
+
+      std::shared_ptr<FermionOpD> stagMatIRL;
+      makeAction(stagMatIRL, actionParIRL);
+
+      // Create operators for IRL if needed
+      SchurStaggeredOperator<FermionOpD, FermionFieldD> hermOpIRL(*stagMatIRL);
+      Chebyshev<FermionFieldD> Cheby(lanczosPar.Cheby.alpha,
+                                     lanczosPar.Cheby.beta,
+                                     lanczosPar.Cheby.Npoly);
+
+      FunctionHermOp<FermionFieldD> OpCheby(Cheby, hermOpIRL);
+      PlainHermOp<FermionFieldD> Op(hermOpIRL);
+
+      ImplicitlyRestartedLanczos<FermionFieldD> IRL(OpCheby, Op, Nstop, Nk, Nm,
+                                                    resid, MaxIt);
+
+      FermionFieldD src(UrbGrid);
+
+      std::cout << GridLogMessage
+                << "Generating random source (checkerboard = " << cb << ")"
+                << std::endl;
+      FermionFieldD gauss(UGrid);
+      std::string seed = getSeed(inputParams, epackPar.seed);
+      rng.SeedUniqueString(seed);
+      gaussian(rng, gauss);
+      pickCheckerboard(cb, src, gauss);
+
       std::cout << GridLogMessage << "Running IRL eigensolver..." << std::endl;
       int Nconv;
       epack->eval.resize(Nm);
@@ -431,38 +433,34 @@ int main(int argc, char **argv) {
   }
 
   std::shared_ptr<FermionOpD> stagMatMassive;
-  RealD solverMass;
   {
-    std::shared_ptr<FermionOpF> stagMatMassiveF;
     std::shared_ptr<FermionFieldD> fermOut;
     std::shared_ptr<FermionFieldD> fermIn;
     std::shared_ptr<FermionFieldD> fermGuess;
 
-    // Create Action objects and temporary fields for solves
+    // Create temporary fields for solves (shared across actions)
     if (hasSources) {
       fermOut = std::make_shared<FermionFieldD>(UGrid);
       fermIn = std::make_shared<FermionFieldD>(UGrid);
       if (hasEigs) {
         fermGuess = std::make_shared<FermionFieldD>(UGrid);
       }
-
-      makeAction(stagMatMassive, inputParams.mpcg.action);
-      makeAction(stagMatMassiveF, inputParams.mpcg.action);
-      solverMass = 2.0 * inputParams.mpcg.action.mass;
     }
 
     using SolverFunc = std::function<void()>;
-    SolverFunc lmaSolver, lmaSolverSubtract;
-    SolverFunc mpcgSolver, mpcgSolverSubtract;
 
-    // Create LMA Solver lambda functions
+    // Shared temporary fields for LMA solver (shared across actions)
+    std::shared_ptr<FermionFieldD> rbFerm, rbFermNeg, MrbFermNeg, rbTemp,
+        rbTempNeg;
+    unsigned int eigStart = 0;
+    int nEigs = 0;
+    bool projector = false;
+
     if (hasEigs && hasSources) {
-
       // Extract LMA parameters
-      unsigned int eigStart =
-          inputParams.lma.eigStart;      // Start from first eigenvalue
-      int nEigs = inputParams.lma.nEigs; // Use all eigenvalues by default
-      bool projector = inputParams.lma.projector; // Use accelerated solver mode
+      eigStart = inputParams.lma.eigStart;
+      nEigs = inputParams.lma.nEigs;
+      projector = inputParams.lma.projector;
 
       if (nEigs < 1) {
         nEigs = epack->evec.size();
@@ -487,110 +485,183 @@ int main(int argc, char **argv) {
 
       // Create temporary fields for LMA solver (heap allocated for use in
       // returned lambda)
-      auto rbFerm = std::make_shared<FermionFieldD>(UrbGrid);
-      auto rbFermNeg = std::make_shared<FermionFieldD>(UrbGrid);
-      auto MrbFermNeg = std::make_shared<FermionFieldD>(UrbGrid);
-      auto rbTemp = std::make_shared<FermionFieldD>(UrbGrid);
-      auto rbTempNeg = std::make_shared<FermionFieldD>(UrbGrid);
-
-      // Lambda to create the LMA solver function
-      auto makeLMASolver = [&stagMatMassive, epack, solverMass, projector,
-                            eigStart, nEigs, rbFerm, rbFermNeg, MrbFermNeg,
-                            rbTemp, rbTempNeg, fermOut, fermIn](bool subGuess) {
-        return [&stagMatMassive, epack, subGuess, solverMass, projector,
-                eigStart, nEigs, rbFerm, rbFermNeg, MrbFermNeg, rbTemp,
-                rbTempNeg, fermOut, fermIn]() {
-          int cb = epack->evec[0].Checkerboard();
-          int cbNeg = (cb == Even) ? Odd : Even;
-
-          RealD norm = 1.0 / ::sqrt(norm2(epack->evec[0]));
-
-          *rbTemp = Zero();
-          rbTemp->Checkerboard() = cb;
-          *rbTempNeg = Zero();
-          rbTempNeg->Checkerboard() = cb;
-
-          rbFerm->Checkerboard() = cb;
-          rbFermNeg->Checkerboard() = cbNeg;
-          MrbFermNeg->Checkerboard() = cb;
-
-          // Extract checkerboard components
-          pickCheckerboard(cb, *rbFerm, *fermIn);
-          pickCheckerboard(cbNeg, *rbFermNeg, *fermIn);
-
-          // Apply M_eooe^dagger
-          stagMatMassive->MeooeDag(*rbFermNeg, *MrbFermNeg);
-
-          // Project onto low modes
-          for (int k = (eigStart + nEigs - 1); k >= static_cast<int>(eigStart);
-               k--) {
-            const FermionFieldD &e = epack->evec[k];
-
-            const RealD lam_DD = epack->eval[k];
-            const RealD invlam_DD = 1.0 / lam_DD;
-            const RealD invmag = 1.0 / (solverMass * solverMass + lam_DD);
-
-            if (!projector) {
-              // Accelerated solver mode
-              const ComplexD ip =
-                  TensorRemove(innerProduct(e, *rbFerm)) * invmag;
-              const ComplexD ipNeg =
-                  TensorRemove(innerProduct(e, *MrbFermNeg)) * invmag;
-              axpy(*rbTemp, solverMass * ip + ipNeg, e, *rbTemp);
-              axpy(*rbTempNeg, solverMass * ipNeg * invlam_DD - ip, e,
-                   *rbTempNeg);
-            } else {
-              // Pure projector mode
-              const ComplexD ip = TensorRemove(innerProduct(e, *rbFerm));
-              const ComplexD ipNeg = TensorRemove(innerProduct(e, *MrbFermNeg));
-              axpy(*rbTemp, ip, e, *rbTemp);
-              axpy(*rbTempNeg, ipNeg * invlam_DD, e, *rbTempNeg);
-            }
-          }
-
-          // Apply M_eooe
-          stagMatMassive->Meooe(*rbTempNeg, *rbFermNeg);
-
-          // Reconstruct full field
-          setCheckerboard(*fermOut, *rbTemp);
-          setCheckerboard(*fermOut, *rbFermNeg);
-
-          *fermOut *= norm;
-
-          if (subGuess) {
-            if (projector) {
-              *fermOut = *fermIn - *fermOut;
-            } else {
-              std::cerr << "ERROR: Subtracted solver only supported for "
-                           "projector=true"
-                        << std::endl;
-              exit(1);
-            }
-          }
-        };
-      };
-
-      // Create the normal and subtract solvers
-      lmaSolver = makeLMASolver(false);
-      lmaSolverSubtract = makeLMASolver(true);
+      rbFerm = std::make_shared<FermionFieldD>(UrbGrid);
+      rbFermNeg = std::make_shared<FermionFieldD>(UrbGrid);
+      MrbFermNeg = std::make_shared<FermionFieldD>(UrbGrid);
+      rbTemp = std::make_shared<FermionFieldD>(UrbGrid);
+      rbTempNeg = std::make_shared<FermionFieldD>(UrbGrid);
 
       std::cout << GridLogMessage << "Low mode projector setup complete"
                 << std::endl;
     }
 
-    // Create Mixed Precision CG Solver lambda functions
-    if (hasSources) {
+    // Lambda to create the LMA solver function for a given action and mass
+    auto makeLMASolver = [epack, rbFerm, rbFermNeg, MrbFermNeg, rbTemp,
+                          rbTempNeg, fermOut,
+                          fermIn](std::shared_ptr<FermionOpD> actionMat,
+                                  RealD sMass, bool projectorFlag,
+                                  unsigned int eStart, int nE, bool subGuess) {
+      return [actionMat, epack, subGuess, sMass, projectorFlag, eStart, nE,
+              rbFerm, rbFermNeg, MrbFermNeg, rbTemp, rbTempNeg, fermOut,
+              fermIn]() {
+        int cb = epack->evec[0].Checkerboard();
+        int cbNeg = (cb == Even) ? Odd : Even;
 
+        RealD norm = 1.0 / ::sqrt(norm2(epack->evec[0]));
+
+        *rbTemp = Zero();
+        rbTemp->Checkerboard() = cb;
+        *rbTempNeg = Zero();
+        rbTempNeg->Checkerboard() = cb;
+
+        rbFerm->Checkerboard() = cb;
+        rbFermNeg->Checkerboard() = cbNeg;
+        MrbFermNeg->Checkerboard() = cb;
+
+        // Extract checkerboard components
+        pickCheckerboard(cb, *rbFerm, *fermIn);
+        pickCheckerboard(cbNeg, *rbFermNeg, *fermIn);
+
+        // Apply M_eooe^dagger
+        actionMat->MeooeDag(*rbFermNeg, *MrbFermNeg);
+
+        // Project onto low modes
+        for (int k = (eStart + nE - 1); k >= static_cast<int>(eStart); k--) {
+          const FermionFieldD &e = epack->evec[k];
+
+          const RealD lam_DD = epack->eval[k];
+          const RealD invlam_DD = 1.0 / lam_DD;
+          const RealD invmag = 1.0 / (sMass * sMass + lam_DD);
+
+          if (!projectorFlag) {
+            // Accelerated solver mode
+            const ComplexD ip = TensorRemove(innerProduct(e, *rbFerm)) * invmag;
+            const ComplexD ipNeg =
+                TensorRemove(innerProduct(e, *MrbFermNeg)) * invmag;
+            axpy(*rbTemp, sMass * ip + ipNeg, e, *rbTemp);
+            axpy(*rbTempNeg, sMass * ipNeg * invlam_DD - ip, e, *rbTempNeg);
+          } else {
+            // Pure projector mode
+            const ComplexD ip = TensorRemove(innerProduct(e, *rbFerm));
+            const ComplexD ipNeg = TensorRemove(innerProduct(e, *MrbFermNeg));
+            axpy(*rbTemp, ip, e, *rbTemp);
+            axpy(*rbTempNeg, ipNeg * invlam_DD, e, *rbTempNeg);
+          }
+        }
+
+        // Apply M_eooe
+        actionMat->Meooe(*rbTempNeg, *rbFermNeg);
+
+        // Reconstruct full field
+        setCheckerboard(*fermOut, *rbTemp);
+        setCheckerboard(*fermOut, *rbFermNeg);
+
+        *fermOut *= norm;
+
+        if (subGuess) {
+          if (projectorFlag) {
+            *fermOut = *fermIn - *fermOut;
+          } else {
+            std::cerr << "ERROR: Subtracted solver only supported for "
+                         "projector=true"
+                      << std::endl;
+            exit(1);
+          }
+        }
+      };
+    };
+
+    // Lambda to create MPCG solver functions for a given action
+    auto makeMPCGSolver = [fermOut, fermIn, fermGuess, &UGrid, &UGridF,
+                           &inputParams](std::shared_ptr<FermionOpD> actionMatD,
+                                         std::shared_ptr<FermionOpF> actionMatF,
+                                         bool subGuess) {
+      auto hermOpOuter =
+          std::make_shared<MdagMLinearOperator<FermionOpD, FermionFieldD>>(
+              *actionMatD);
+      auto hermOpInner =
+          std::make_shared<MdagMLinearOperator<FermionOpF, FermionFieldF>>(
+              *actionMatF);
+      auto temp = std::make_shared<FermionFieldD>(UGrid);
       auto &mpcgPar = inputParams.mpcg;
 
-      std::cout << GridLogMessage << "Setting up mixed-precision CG solver"
+      return [actionMatD, subGuess, fermOut, fermIn, fermGuess, temp,
+              hermOpInner, hermOpOuter, &UGridF, &mpcgPar]() {
+        MixedPrecisionConjugateGradient<FermionFieldD, FermionFieldF> mpcg(
+            mpcgPar.residual, mpcgPar.maxInnerIteration,
+            mpcgPar.maxOuterIteration, UGridF, *hermOpInner, *hermOpOuter);
+
+        std::cout << GridLogMessage << "MPCG"
+                  << (fermGuess == nullptr ? "Null" : "Not Null") << std::endl;
+        // Compute initial guess via outer guesser
+        if (fermGuess != nullptr) {
+          *fermOut = *fermGuess;
+        } else {
+          *fermOut = 1.0;
+        }
+
+        ZeroGuesser<FermionFieldF> iguesserDefault;
+        mpcg.useGuesser(iguesserDefault);
+        // Create temporary for residual
+        *temp = Zero();
+        actionMatD->Mdag(*fermIn, *temp);
+
+        // Run MPCG solver on M^dag*M*x = M^dag*source
+        mpcg(*temp, *fermOut);
+
+        RealD nsol = norm2(*fermOut);
+        // Compute residual: r = M*sol - source
+        actionMatD->M(*fermOut, *temp);
+        RealD nMsol = norm2(*temp);
+        *temp = *temp - *fermIn;
+
+        // Compute relative residual
+        RealD ns = norm2(*fermIn);
+        RealD nr = norm2(*temp);
+        RealD relres = (ns > 0.0) ? std::sqrt(nr / ns) : 0.0;
+
+        std::cout << GridLogMessage << "MPCG: Final true residual = " << relres
+                  << std::endl;
+
+        if (subGuess && fermGuess != nullptr) {
+          // For subtraction mode, compute residual vector
+          *fermOut = *fermOut - *fermGuess;
+        }
+      };
+    };
+
+    // Build per-action solvers
+    size_t nActions = inputParams.highModeActions.size();
+    std::vector<std::shared_ptr<FermionOpD>> actionMatsD(nActions);
+    std::vector<std::shared_ptr<FermionOpF>> actionMatsF(nActions);
+    std::vector<RealD> actionMasses(nActions);
+    std::vector<SolverFunc> lmaSolvers(nActions);
+    std::vector<SolverFunc> mpcgSolvers(nActions);
+
+    for (size_t aIdx = 0; aIdx < nActions; ++aIdx) {
+      auto &actionPar = inputParams.highModeActions[aIdx];
+      makeAction(actionMatsD[aIdx], actionPar);
+      makeAction(actionMatsF[aIdx], actionPar);
+      actionMasses[aIdx] = 2.0 * actionPar.mass;
+
+      std::cout << GridLogMessage << "Setting up action " << aIdx
+                << " with mass = " << actionPar.mass << std::endl;
+
+      if (hasEigs) {
+        lmaSolvers[aIdx] = makeLMASolver(actionMatsD[aIdx], actionMasses[aIdx],
+                                         projector, eigStart, nEigs, false);
+      }
+
+      auto &mpcgPar = inputParams.mpcg;
+      std::cout << GridLogMessage
+                << "Setting up mixed-precision CG solver for action " << aIdx
                 << std::endl;
       std::cout << GridLogMessage
                 << "  Inner action (single precision): mass = "
-                << mpcgPar.action.mass << std::endl;
+                << actionPar.mass << std::endl;
       std::cout << GridLogMessage
                 << "  Outer action (double precision): mass = "
-                << mpcgPar.action.mass << std::endl;
+                << actionPar.mass << std::endl;
       std::cout << GridLogMessage << "  Residual: " << mpcgPar.residual
                 << std::endl;
       std::cout << GridLogMessage
@@ -600,73 +671,11 @@ int main(int argc, char **argv) {
                 << "  Max outer iterations: " << mpcgPar.maxOuterIteration
                 << std::endl;
 
-      // Create hermitian operators for mixed precision solve
-      auto hermOpOuter =
-          std::make_shared<MdagMLinearOperator<FermionOpD, FermionFieldD>>(
-              *stagMatMassive);
-      auto hermOpInner =
-          std::make_shared<MdagMLinearOperator<FermionOpF, FermionFieldF>>(
-              *stagMatMassiveF);
-      auto temp = std::make_shared<FermionFieldD>(UGrid);
+      mpcgSolvers[aIdx] =
+          makeMPCGSolver(actionMatsD[aIdx], actionMatsF[aIdx], false);
 
-      std::cout << GridLogMessage << "Mixed precision CG solver created"
+      std::cout << GridLogMessage << "Solvers created for action " << aIdx
                 << std::endl;
-
-      // Lambda to create MPCG solver functions
-      auto makeMPCGSolver = [stagMatMassive, fermOut, fermIn, fermGuess, temp,
-                             hermOpInner, hermOpOuter, &UGridF,
-                             &mpcgPar](bool subGuess) {
-        return [stagMatMassive, subGuess, fermOut, fermIn, fermGuess, temp,
-                hermOpInner, hermOpOuter, &UGridF, &mpcgPar]() {
-          MixedPrecisionConjugateGradient<FermionFieldD, FermionFieldF> mpcg(
-              mpcgPar.residual, mpcgPar.maxInnerIteration,
-              mpcgPar.maxOuterIteration, UGridF, *hermOpInner, *hermOpOuter);
-
-          std::cout << GridLogMessage << "MPCG"
-                    << (fermGuess == nullptr ? "Null" : "Not Null")
-                    << std::endl;
-          // Compute initial guess via outer guesser
-          if (fermGuess != nullptr) {
-            *fermOut = *fermGuess;
-          } else {
-            *fermOut = 1.0;
-          }
-
-          ZeroGuesser<FermionFieldF> iguesserDefault;
-          mpcg.useGuesser(iguesserDefault);
-          // Create temporary for residual
-          *temp = Zero();
-          stagMatMassive->Mdag(*fermIn, *temp);
-
-          // Run MPCG solver on M^dag*M*x = M^dag*source
-          mpcg(*temp, *fermOut);
-
-          RealD nsol = norm2(*fermOut);
-          // Compute residual: r = M*sol - source
-          stagMatMassive->M(*fermOut, *temp);
-          RealD nMsol = norm2(*temp);
-          *temp = *temp - *fermIn;
-
-          // Compute relative residual
-          RealD ns = norm2(*fermIn);
-          RealD nr = norm2(*temp);
-          RealD relres = (ns > 0.0) ? std::sqrt(nr / ns) : 0.0;
-
-          std::cout << GridLogMessage
-                    << "MPCG: Final true residual = " << relres << std::endl;
-
-          if (subGuess && fermGuess != nullptr) {
-            // For subtraction mode, compute residual vector
-            *fermOut = *fermOut - *fermGuess;
-          }
-        };
-      };
-
-      // Create the MPCG solvers (normal and subtract)
-      mpcgSolver = makeMPCGSolver(false);
-      mpcgSolverSubtract = makeMPCGSolver(true);
-
-      std::cout << GridLogMessage << "MPCG solvers created" << std::endl;
     }
 
     for (auto &sourcePar : inputParams.sources) {
@@ -739,172 +748,190 @@ int main(int argc, char **argv) {
           std::cout << GridLogMessage << "Random wall sources setup complete"
                     << std::endl;
 
-          std::map<std::string, PropagatorFieldD> lmaProp;
-          std::map<std::string, PropagatorFieldD> mpcgProp;
-          for (auto &corrPar : inputParams.corr) {
-            // Initialize meson results for all gamma pairs
-            std::cout << GridLogMessage << "Setting up meson contraction"
-                      << std::endl;
+          // Loop over actions
+          for (size_t aIdx = 0; aIdx < nActions; ++aIdx) {
+            std::string massSuffix =
+                "_m" + std::to_string(inputParams.highModeActions[aIdx].mass);
+            std::cout << GridLogMessage << "Processing action " << aIdx
+                      << " (mass = " << inputParams.highModeActions[aIdx].mass
+                      << ")" << std::endl;
 
-            auto antiquarkGammaKeys =
-                StagGamma::ParseSpinTaste(corrPar.antiquark.gammas);
-            auto quarkGammaKeys =
-                StagGamma::ParseSpinTaste(corrPar.quark.gammas);
-            auto sinkGammaKeys = StagGamma::ParseSpinTaste(corrPar.sink.gammas);
-            std::string antiquarkGammaName =
-                StagGamma::GetName(antiquarkGammaKeys[0]);
+            std::map<std::string, PropagatorFieldD> lmaProp;
+            std::map<std::string, PropagatorFieldD> mpcgProp;
+            for (auto &corrPar : inputParams.corr) {
+              // Initialize meson results for all gamma pairs
+              std::cout << GridLogMessage << "Setting up meson contraction"
+                        << std::endl;
 
-            std::vector<MesonResult> mesonResults(quarkGammaKeys.size());
-            for (size_t i = 0; i < quarkGammaKeys.size(); ++i) {
-              std::string quarkGammaName =
-                  StagGamma::GetName(quarkGammaKeys[i]);
-              std::string sinkGammaName = StagGamma::GetName(sinkGammaKeys[i]);
+              auto antiquarkGammaKeys =
+                  StagGamma::ParseSpinTaste(corrPar.antiquark.gammas);
+              auto quarkGammaKeys =
+                  StagGamma::ParseSpinTaste(corrPar.quark.gammas);
+              auto sinkGammaKeys =
+                  StagGamma::ParseSpinTaste(corrPar.sink.gammas);
+              std::string antiquarkGammaName =
+                  StagGamma::GetName(antiquarkGammaKeys[0]);
 
-              mesonResults[i].sourceGamma = quarkGammaName;
-              mesonResults[i].sinkGamma = sinkGammaName;
-              mesonResults[i].corr.resize(Nt, 0.0);
-              mesonResults[i].srcCorrs.resize(nVecs,
-                                              std::vector<Complex>(Nt, 0.0));
-              mesonResults[i].scaling = nVecs;
-            }
+              std::vector<MesonResult> mesonResults(quarkGammaKeys.size());
+              for (size_t i = 0; i < quarkGammaKeys.size(); ++i) {
+                std::string quarkGammaName =
+                    StagGamma::GetName(quarkGammaKeys[i]);
+                std::string sinkGammaName =
+                    StagGamma::GetName(sinkGammaKeys[i]);
 
-            PropagatorFieldD gammaProp(UGrid);
-            auto doSolves =
-                [&quarkGammaKeys, &antiquarkGammaKeys, &solveGammas, &gammaProp,
-                 &lmaProp, &randomWallSource, fermIn, fermOut, fermGuess, &U,
-                 UGrid](std::map<std::string, PropagatorFieldD> &propMap,
-                        SolverFunc solver) {
-                  StagGamma gamma;
-                  gamma.setGaugeField(U);
-                  // Create StagGamma operator
-                  for (const auto &gammaPair : solveGammas) {
-                    auto antiquarkIt = std::find_if(
-                        antiquarkGammaKeys.begin(), antiquarkGammaKeys.end(),
-                        [&](const auto &p) {
-                          return StagGamma::GetName(p) == gammaPair.first;
-                        });
-                    auto quarkIt = std::find_if(
-                        quarkGammaKeys.begin(), quarkGammaKeys.end(),
-                        [&](const auto &p) {
-                          return StagGamma::GetName(p) == gammaPair.first;
-                        });
-                    if ((antiquarkIt != antiquarkGammaKeys.end() ||
-                         quarkIt != quarkGammaKeys.end()) &&
-                        propMap.find(gammaPair.first) == propMap.end()) {
-                      std::cout << GridLogMessage
-                                << "Solving gamma: " << gammaPair.first
-                                << std::endl;
-                      propMap.emplace(gammaPair.first, UGrid);
-                      propMap.at(gammaPair.first) = Zero();
+                mesonResults[i].sourceGamma = quarkGammaName;
+                mesonResults[i].sinkGamma = sinkGammaName;
+                mesonResults[i].corr.resize(Nt, 0.0);
+                mesonResults[i].srcCorrs.resize(nVecs,
+                                                std::vector<Complex>(Nt, 0.0));
+                mesonResults[i].scaling = nVecs;
+              }
 
-                      *fermIn = Zero();
-                      *fermOut = Zero();
-                      gamma.setSpinTaste(gammaPair.second);
+              PropagatorFieldD gammaProp(UGrid);
+              auto doSolves =
+                  [&quarkGammaKeys, &antiquarkGammaKeys, &solveGammas,
+                   &gammaProp, &lmaProp, &randomWallSource, fermIn, fermOut,
+                   fermGuess, &U,
+                   UGrid](std::map<std::string, PropagatorFieldD> &propMap,
+                          SolverFunc solver) {
+                    StagGamma gamma;
+                    gamma.setGaugeField(U);
+                    // Create StagGamma operator
+                    for (const auto &gammaPair : solveGammas) {
+                      auto antiquarkIt = std::find_if(
+                          antiquarkGammaKeys.begin(), antiquarkGammaKeys.end(),
+                          [&](const auto &p) {
+                            return StagGamma::GetName(p) == gammaPair.first;
+                          });
+                      auto quarkIt = std::find_if(
+                          quarkGammaKeys.begin(), quarkGammaKeys.end(),
+                          [&](const auto &p) {
+                            return StagGamma::GetName(p) == gammaPair.first;
+                          });
+                      if ((antiquarkIt != antiquarkGammaKeys.end() ||
+                           quarkIt != quarkGammaKeys.end()) &&
+                          propMap.find(gammaPair.first) == propMap.end()) {
+                        std::cout << GridLogMessage
+                                  << "Solving gamma: " << gammaPair.first
+                                  << std::endl;
+                        propMap.emplace(gammaPair.first, UGrid);
+                        propMap.at(gammaPair.first) = Zero();
 
-                      gammaProp = Zero();
-                      gamma(gammaProp, randomWallSource);
+                        *fermIn = Zero();
+                        *fermOut = Zero();
+                        gamma.setSpinTaste(gammaPair.second);
 
-                      for (int c = 0; c < 3; c++) {
-                        PropToFerm<FImpl>(*fermIn, gammaProp, c);
+                        gammaProp = Zero();
+                        gamma(gammaProp, randomWallSource);
 
-                        std::cout
-                            << GridLogMessage << "doSolves"
-                            << (fermGuess == nullptr ? "Null" : "Not Null")
-                            << std::endl;
-                        if (fermGuess != nullptr) {
-                          PropToFerm<FImpl>(*fermGuess,
-                                            lmaProp.at(gammaPair.first), c);
+                        for (int c = 0; c < 3; c++) {
+                          PropToFerm<FImpl>(*fermIn, gammaProp, c);
+
+                          std::cout
+                              << GridLogMessage << "doSolves"
+                              << (fermGuess == nullptr ? "Null" : "Not Null")
+                              << std::endl;
+                          if (fermGuess != nullptr) {
+                            PropToFerm<FImpl>(*fermGuess,
+                                              lmaProp.at(gammaPair.first), c);
+                          }
+                          solver();
+                          FermToProp<FImpl>(propMap.at(gammaPair.first),
+                                            *fermOut, c);
                         }
-                        solver();
-                        FermToProp<FImpl>(propMap.at(gammaPair.first), *fermOut,
-                                          c);
                       }
                     }
-                  }
-                };
+                  };
 
-            if (hasEigs) {
-              std::cout << GridLogMessage << "Solving with LMA solver"
-                        << std::endl;
-              doSolves(lmaProp, lmaSolver);
-            }
-            if (!corrPar.amaOutput.empty()) {
-              std::cout << GridLogMessage << "Solving with MPCG solver"
-                        << std::endl;
-              doSolves(mpcgProp, mpcgSolver);
-            }
+              if (hasEigs) {
+                std::cout << GridLogMessage << "Solving with LMA solver"
+                          << std::endl;
+                doSolves(lmaProp, lmaSolvers[aIdx]);
+              }
+              if (!corrPar.amaOutput.empty()) {
+                std::cout << GridLogMessage << "Solving with MPCG solver"
+                          << std::endl;
+                doSolves(mpcgProp, mpcgSolvers[aIdx]);
+              }
 
-            auto doContractions =
-                [&gammaProp, &solveGammas, &mesonResults, t0, Nt,
-                 &antiquarkGammaName, &U,
-                 UGrid](std::map<std::string, PropagatorFieldD> &propMap) {
-                  StagGamma gamma;
-                  gamma.setGaugeField(U);
-                  // Accumulate meson contraction results for this source
-                  for (size_t i = 0; i < mesonResults.size(); ++i) {
-                    std::string quarkGammaName = mesonResults[i].sourceGamma;
-                    std::string sinkGammaName = mesonResults[i].sinkGamma;
-                    std::cout << GridLogMessage
-                              << "Contracting source gamma: " << quarkGammaName
-                              << ", sink gamma: " << sinkGammaName << std::endl;
-                    gamma.setSpinTaste(solveGammas.at(sinkGammaName));
+              auto doContractions =
+                  [&gammaProp, &solveGammas, &mesonResults, t0, Nt,
+                   &antiquarkGammaName, &U,
+                   UGrid](std::map<std::string, PropagatorFieldD> &propMap) {
+                    StagGamma gamma;
+                    gamma.setGaugeField(U);
+                    // Accumulate meson contraction results for this source
+                    for (size_t i = 0; i < mesonResults.size(); ++i) {
+                      std::string quarkGammaName = mesonResults[i].sourceGamma;
+                      std::string sinkGammaName = mesonResults[i].sinkGamma;
+                      std::cout
+                          << GridLogMessage
+                          << "Contracting source gamma: " << quarkGammaName
+                          << ", sink gamma: " << sinkGammaName << std::endl;
+                      gamma.setSpinTaste(solveGammas.at(sinkGammaName));
 
-                    PropagatorFieldD prod(UGrid);
-                    gamma(gammaProp, propMap.at(quarkGammaName));
-                    prod = propMap.at(antiquarkGammaName) * adj(gammaProp);
+                      PropagatorFieldD prod(UGrid);
+                      gamma(gammaProp, propMap.at(quarkGammaName));
+                      prod = propMap.at(antiquarkGammaName) * adj(gammaProp);
 
-                    std::vector<TComplex> buf;
-                    LatticeComplexD slicedTrace = trace(prod);
-                    sliceSum(slicedTrace, buf, Tp);
-                    int sliceOffset = t0;
-                    for (int t = 0; t < Nt; ++t) {
-                      Complex ct = TensorRemove(buf[sliceOffset]);
-                      mesonResults[i].srcCorrs[0][t] = ct;
-                      sliceOffset = mod(sliceOffset + 1, Nt);
-                    }
-                  }
-
-                  // Compute averaged correlators from all sources
-                  for (size_t i = 0; i < mesonResults.size(); ++i) {
-                    for (int t = 0; t < Nt; ++t) {
-                      mesonResults[i].corr[t] = 0.0;
-                      for (int j = 0; j < mesonResults[i].scaling; j++) {
-                        mesonResults[i].corr[t] +=
-                            mesonResults[i].srcCorrs[j][t];
+                      std::vector<TComplex> buf;
+                      LatticeComplexD slicedTrace = trace(prod);
+                      sliceSum(slicedTrace, buf, Tp);
+                      int sliceOffset = t0;
+                      for (int t = 0; t < Nt; ++t) {
+                        Complex ct = TensorRemove(buf[sliceOffset]);
+                        mesonResults[i].srcCorrs[0][t] = ct;
+                        sliceOffset = mod(sliceOffset + 1, Nt);
                       }
-                      mesonResults[i].corr[t] /= mesonResults[i].scaling;
                     }
-                  }
-                };
 
-            if (!corrPar.lmaOutput.empty() && hasEigs) {
-              std::cout << GridLogMessage << "Contracting LMA propagators"
-                        << std::endl;
-              doContractions(lmaProp);
-              saveResult(UGrid, corrPar.lmaOutput, "meson", mesonResults,
-                         inputParams, t0);
-            }
-            if (!corrPar.amaOutput.empty()) {
-              std::cout << GridLogMessage
-                        << "Contracting AMA (MPCG) propagators" << std::endl;
-              doContractions(mpcgProp);
-              saveResult(UGrid, corrPar.amaOutput, "meson", mesonResults,
-                         inputParams, t0);
+                    // Compute averaged correlators from all sources
+                    for (size_t i = 0; i < mesonResults.size(); ++i) {
+                      for (int t = 0; t < Nt; ++t) {
+                        mesonResults[i].corr[t] = 0.0;
+                        for (int j = 0; j < mesonResults[i].scaling; j++) {
+                          mesonResults[i].corr[t] +=
+                              mesonResults[i].srcCorrs[j][t];
+                        }
+                        mesonResults[i].corr[t] /= mesonResults[i].scaling;
+                      }
+                    }
+                  };
+
+              if (!corrPar.lmaOutput.empty() && hasEigs) {
+                std::cout << GridLogMessage << "Contracting LMA propagators"
+                          << std::endl;
+                doContractions(lmaProp);
+                saveResult(UGrid, corrPar.lmaOutput + massSuffix, "meson",
+                           mesonResults, inputParams, t0);
+              }
+              if (!corrPar.amaOutput.empty()) {
+                std::cout << GridLogMessage
+                          << "Contracting AMA (MPCG) propagators" << std::endl;
+                doContractions(mpcgProp);
+                saveResult(UGrid, corrPar.amaOutput + massSuffix, "meson",
+                           mesonResults, inputParams, t0);
+              }
             }
           }
         }
       }
     }
   }
-  auto &a2aPar = inputParams.a2a;
+  for (size_t a2aIdx = 0; a2aIdx < inputParams.a2a.size(); ++a2aIdx) {
+    auto &a2aPar = inputParams.a2a[a2aIdx];
 
-  if (hasEigs) {
+    // TODO: remove this condition, implement general a2a
+    if (!hasEigs)
+      break;
+
     makeAction(stagMatMassive, a2aPar.action);
     RealD a2aMass = 2.0 * a2aPar.action.mass;
     int nBlock = a2aPar.block;
 
     std::cout << GridLogMessage
-              << "Setting up all-to-all meson field construction" << std::endl;
+              << "\nSetting up all-to-all meson field construction (" << a2aIdx
+              << ")" << std::endl;
     std::cout << GridLogMessage << "  Block size: " << nBlock << std::endl;
     std::cout << GridLogMessage << "  Output: " << a2aPar.output << std::endl;
 
@@ -1046,7 +1073,8 @@ int main(int argc, char **argv) {
       computationComms->execute(kernel, mesonData);
     }
     std::cout << GridLogMessage
-              << "All-to-all meson field construction complete" << std::endl;
+              << "All-to-all meson field construction complete (" << a2aIdx
+              << ")" << std::endl;
   }
   Grid_finalize();
 }

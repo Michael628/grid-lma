@@ -86,10 +86,9 @@ public:
 
 class MixedPrecisionCGPar : Serializable {
 public:
-  GRID_SERIALIZABLE_CLASS_MEMBERS(MixedPrecisionCGPar, ImprovedStaggeredPar,
-                                  action, unsigned int, maxInnerIteration,
-                                  unsigned int, maxOuterIteration, double,
-                                  residual);
+  GRID_SERIALIZABLE_CLASS_MEMBERS(MixedPrecisionCGPar, unsigned int,
+                                  maxInnerIteration, unsigned int,
+                                  maxOuterIteration, double, residual);
 };
 
 // ============================================================================
@@ -177,13 +176,13 @@ public:
 
 class GlobalPar : Serializable {
 public:
-  GRID_SERIALIZABLE_CLASS_MEMBERS(GlobalPar, GaugePar, gauge, EpackPar, epack,
-                                  LowModeProjPar, lma, MixedPrecisionCGPar,
-                                  mpcg, std::vector<ContractionPar>, corr,
-                                  MesonFieldPar, a2a,
-                                  std::vector<RandomWallPar>, sources,
-                                  std::string, series, std::string, runSeed,
-                                  unsigned int, trajectory);
+  GRID_SERIALIZABLE_CLASS_MEMBERS(
+      GlobalPar, GaugePar, gauge, EpackPar, epack, LowModeProjPar, lma,
+      MixedPrecisionCGPar, mpcg, std::vector<ImprovedStaggeredPar>,
+      highModeActions, std::vector<ContractionPar>, corr,
+      std::vector<MesonFieldPar>, a2a,
+      std::vector<RandomWallPar>, sources, std::string, series, std::string,
+      runSeed, unsigned int, trajectory);
 };
 
 int mkdir(const std::string dirName);
