@@ -36,6 +36,7 @@ void readElement(T &evec, RealD &eval, const unsigned int index,
   bool cb = false;
   GridBase *g = evec.Grid();
 
+  std::cout << GridLogMessage << "Reading eigenvector " << index << std::endl;
   binReader.readScidacFieldRecord(evec, vecRecord);
 
   if (vecRecord.index != index) {
