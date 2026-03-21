@@ -414,8 +414,9 @@ int main(int argc, char **argv) {
       std::cout << GridLogMessage << "Loading eigenpack from " << epackPar.file
                 << std::endl;
       assert(!epackPar.file.empty());
-      epack->read(epackPar.file, epackPar.multiFile, traj);
       epack->eval.resize(epackPar.size);
+      epack->evec.resize(epackPar.size, UrbGrid);
+      epack->read(epackPar.file, epackPar.multiFile, traj);
     }
 
     if (!epackPar.evalSave.empty()) {
