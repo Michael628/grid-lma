@@ -631,8 +631,9 @@ int main(int argc, char **argv) {
       };
     };
 
-    // Build per-action solvers
+    // Build per-action solvers, indexed by label
     size_t nActions = inputParams.highModeActions.size();
+    std::map<std::string, size_t> actionLabelMap;
     std::vector<std::shared_ptr<FermionOpD>> actionMatsD(nActions);
     std::vector<std::shared_ptr<FermionOpF>> actionMatsF(nActions);
     std::vector<RealD> actionMasses(nActions);
@@ -641,12 +642,14 @@ int main(int argc, char **argv) {
 
     for (size_t aIdx = 0; aIdx < nActions; ++aIdx) {
       auto &actionPar = inputParams.highModeActions[aIdx];
+      actionLabelMap[actionPar.label] = aIdx;
       makeAction(actionMatsD[aIdx], actionPar);
       makeAction(actionMatsF[aIdx], actionPar);
       actionMasses[aIdx] = 2.0 * actionPar.mass;
 
-      std::cout << GridLogMessage << "Setting up action " << aIdx
-                << " with mass = " << actionPar.mass << std::endl;
+      std::cout << GridLogMessage << "Setting up action '" << actionPar.label
+                << "' (index " << aIdx << ") with mass = " << actionPar.mass
+                << std::endl;
 
       if (hasEigs) {
         lmaSolvers[aIdx] = makeLMASolver(actionMatsD[aIdx], actionMasses[aIdx],
@@ -655,29 +658,48 @@ int main(int argc, char **argv) {
 
       auto &mpcgPar = inputParams.mpcg;
       std::cout << GridLogMessage
-                << "Setting up mixed-precision CG solver for action " << aIdx
-                << std::endl;
-      std::cout << GridLogMessage
-                << "  Inner action (single precision): mass = "
-                << actionPar.mass << std::endl;
-      std::cout << GridLogMessage
-                << "  Outer action (double precision): mass = "
-                << actionPar.mass << std::endl;
+                << "Setting up mixed-precision CG solver for action '"
+                << actionPar.label << "'" << std::endl;
       std::cout << GridLogMessage << "  Residual: " << mpcgPar.residual
-                << std::endl;
-      std::cout << GridLogMessage
-                << "  Max inner iterations: " << mpcgPar.maxInnerIteration
-                << std::endl;
-      std::cout << GridLogMessage
-                << "  Max outer iterations: " << mpcgPar.maxOuterIteration
                 << std::endl;
 
       mpcgSolvers[aIdx] =
           makeMPCGSolver(actionMatsD[aIdx], actionMatsF[aIdx], false);
 
-      std::cout << GridLogMessage << "Solvers created for action " << aIdx
-                << std::endl;
+      std::cout << GridLogMessage << "Solvers created for action '"
+                << actionPar.label << "'" << std::endl;
     }
+
+    // Helper to resolve action label to index
+    auto resolveAction = [&actionLabelMap](const std::string &label) -> size_t {
+      auto it = actionLabelMap.find(label);
+      if (it == actionLabelMap.end()) {
+        std::cerr << "ERROR: Unknown action label '" << label << "'"
+                  << std::endl;
+        exit(1);
+      }
+      return it->second;
+    };
+
+    // Helper to resolve solver label to solver function
+    auto resolveSolver = [&lmaSolvers, &mpcgSolvers,
+                          hasEigs](const std::string &solverName,
+                                   size_t aIdx) -> SolverFunc * {
+      if (solverName == "lma") {
+        if (!hasEigs) {
+          std::cerr << "ERROR: lma solver requested but no eigenpack available"
+                    << std::endl;
+          exit(1);
+        }
+        return &lmaSolvers[aIdx];
+      } else if (solverName == "mpcg") {
+        return &mpcgSolvers[aIdx];
+      } else {
+        std::cerr << "ERROR: Unknown solver '" << solverName << "'" << std::endl;
+        exit(1);
+      }
+      return nullptr;
+    };
 
     for (auto &sourcePar : inputParams.sources) {
       // Random wall source parameters (from XML) - Color-diagonal only
@@ -712,34 +734,6 @@ int main(int argc, char **argv) {
                 << std::endl;
 
       PropagatorFieldD randomWallSource(UGrid);
-      std::map<std::string, StagGamma::SpinTastePair> solveGammas;
-      for (auto &corrPar : inputParams.corr) {
-
-        auto quarkGammaKeys = StagGamma::ParseSpinTaste(corrPar.quark.gammas);
-        auto quarkGammaVals = StagGamma::ParseSpinTaste(corrPar.quark.gammas,
-                                                        corrPar.quark.applyG5);
-        GRID_ASSERT(!quarkGammaKeys.empty());
-
-        auto antiquarkGammaKeys =
-            StagGamma::ParseSpinTaste(corrPar.antiquark.gammas);
-        auto antiquarkGammaVals = StagGamma::ParseSpinTaste(
-            corrPar.antiquark.gammas, corrPar.antiquark.applyG5);
-        GRID_ASSERT(antiquarkGammaKeys.size() == 1);
-        std::string antiquarkGammaName =
-            StagGamma::GetName(antiquarkGammaKeys[0]);
-        StagGamma::SpinTastePair antiquarkSpinTaste = antiquarkGammaVals[0];
-
-        auto sinkGammaKeys = StagGamma::ParseSpinTaste(corrPar.sink.gammas);
-        auto sinkGammaVals = StagGamma::ParseSpinTaste(corrPar.sink.gammas,
-                                                       corrPar.sink.applyG5);
-        GRID_ASSERT(sinkGammaKeys.size() == quarkGammaKeys.size());
-
-        for (size_t i = 0; i < quarkGammaKeys.size(); ++i) {
-          solveGammas.emplace(StagGamma::GetName(quarkGammaKeys[i]),
-                              quarkGammaVals[i]);
-        }
-        solveGammas.emplace(antiquarkGammaName, antiquarkSpinTaste);
-      }
       for (int i = 0; i < nSrc; i++) {
         for (int j = 0; j < nSlices; j++) {
           int timeSlice = j * tStep + t0;
@@ -749,170 +743,225 @@ int main(int argc, char **argv) {
           std::cout << GridLogMessage << "Random wall sources setup complete"
                     << std::endl;
 
-          // Loop over actions
-          for (size_t aIdx = 0; aIdx < nActions; ++aIdx) {
-            std::string massSuffix =
-                "_m" + std::to_string(inputParams.highModeActions[aIdx].mass);
-            std::cout << GridLogMessage << "Processing action " << aIdx
-                      << " (mass = " << inputParams.highModeActions[aIdx].mass
-                      << ")" << std::endl;
+          // Propagator cache: key = (actionLabel, solverType, gammaName)
+          // Caches propagator results to avoid redundant solves across
+          // correlators
+          std::map<std::tuple<std::string, std::string, std::string>,
+                   PropagatorFieldD>
+              propCache;
 
-            std::map<std::string, PropagatorFieldD> lmaProp;
-            std::map<std::string, PropagatorFieldD> mpcgProp;
-            for (auto &corrPar : inputParams.corr) {
-              // Initialize meson results for all gamma pairs
-              std::cout << GridLogMessage << "Setting up meson contraction"
-                        << std::endl;
+          // Also cache LMA props for use as MPCG guesses
+          std::map<std::pair<std::string, std::string>, PropagatorFieldD>
+              lmaPropCache;
 
-              auto antiquarkGammaKeys =
-                  StagGamma::ParseSpinTaste(corrPar.antiquark.gammas);
-              auto quarkGammaKeys =
-                  StagGamma::ParseSpinTaste(corrPar.quark.gammas);
-              auto sinkGammaKeys =
-                  StagGamma::ParseSpinTaste(corrPar.sink.gammas);
-              std::string antiquarkGammaName =
-                  StagGamma::GetName(antiquarkGammaKeys[0]);
+          for (auto &corrPar : inputParams.corr) {
+            std::cout << GridLogMessage << "Setting up meson contraction"
+                      << std::endl;
 
-              std::vector<MesonResult> mesonResults(quarkGammaKeys.size());
-              for (size_t i = 0; i < quarkGammaKeys.size(); ++i) {
-                std::string quarkGammaName =
-                    StagGamma::GetName(quarkGammaKeys[i]);
-                std::string sinkGammaName =
-                    StagGamma::GetName(sinkGammaKeys[i]);
+            // Parse gamma structures
+            auto quarkGammaKeys =
+                StagGamma::ParseSpinTaste(corrPar.quark.gammas);
+            auto quarkGammaVals = StagGamma::ParseSpinTaste(
+                corrPar.quark.gammas, corrPar.quark.applyG5);
+            GRID_ASSERT(!quarkGammaKeys.empty());
 
-                mesonResults[i].sourceGamma = quarkGammaName;
-                mesonResults[i].sinkGamma = sinkGammaName;
-                mesonResults[i].corr.resize(Nt, 0.0);
-                mesonResults[i].srcCorrs.resize(nVecs,
-                                                std::vector<Complex>(Nt, 0.0));
-                mesonResults[i].scaling = nVecs;
-              }
+            auto antiquarkGammaKeys =
+                StagGamma::ParseSpinTaste(corrPar.antiquark.gammas);
+            auto antiquarkGammaVals = StagGamma::ParseSpinTaste(
+                corrPar.antiquark.gammas, corrPar.antiquark.applyG5);
+            GRID_ASSERT(antiquarkGammaKeys.size() == 1);
+            std::string antiquarkGammaName =
+                StagGamma::GetName(antiquarkGammaKeys[0]);
+            StagGamma::SpinTastePair antiquarkSpinTaste =
+                antiquarkGammaVals[0];
 
-              PropagatorFieldD gammaProp(UGrid);
-              auto doSolves =
-                  [&quarkGammaKeys, &antiquarkGammaKeys, &solveGammas,
-                   &gammaProp, &lmaProp, &randomWallSource, fermIn, fermOut,
-                   fermGuess, &U,
-                   UGrid](std::map<std::string, PropagatorFieldD> &propMap,
-                          SolverFunc solver) {
-                    StagGamma gamma;
-                    gamma.setGaugeField(U);
-                    // Create StagGamma operator
-                    for (const auto &gammaPair : solveGammas) {
-                      auto antiquarkIt = std::find_if(
-                          antiquarkGammaKeys.begin(), antiquarkGammaKeys.end(),
-                          [&](const auto &p) {
-                            return StagGamma::GetName(p) == gammaPair.first;
-                          });
-                      auto quarkIt = std::find_if(
-                          quarkGammaKeys.begin(), quarkGammaKeys.end(),
-                          [&](const auto &p) {
-                            return StagGamma::GetName(p) == gammaPair.first;
-                          });
-                      if ((antiquarkIt != antiquarkGammaKeys.end() ||
-                           quarkIt != quarkGammaKeys.end()) &&
-                          propMap.find(gammaPair.first) == propMap.end()) {
+            auto sinkGammaKeys =
+                StagGamma::ParseSpinTaste(corrPar.sink.gammas);
+            auto sinkGammaVals = StagGamma::ParseSpinTaste(
+                corrPar.sink.gammas, corrPar.sink.applyG5);
+            GRID_ASSERT(sinkGammaKeys.size() == quarkGammaKeys.size());
+
+            // Build the gamma map for this correlator's solves
+            std::map<std::string, StagGamma::SpinTastePair> solveGammas;
+            for (size_t gi = 0; gi < quarkGammaKeys.size(); ++gi) {
+              solveGammas.emplace(StagGamma::GetName(quarkGammaKeys[gi]),
+                                  quarkGammaVals[gi]);
+            }
+            solveGammas.emplace(antiquarkGammaName, antiquarkSpinTaste);
+
+            // Resolve actions and solvers for this correlator
+            size_t quarkActionIdx = resolveAction(corrPar.quarkAction);
+            size_t antiquarkActionIdx = resolveAction(corrPar.antiquarkAction);
+
+            std::cout << GridLogMessage << "Correlator: quarkAction='"
+                      << corrPar.quarkAction << "' (" << corrPar.quarkSolver
+                      << "), antiquarkAction='" << corrPar.antiquarkAction
+                      << "' (" << corrPar.antiquarkSolver << ")" << std::endl;
+
+            // Lambda to solve a set of gammas with a given action+solver,
+            // caching results
+            auto doSolves =
+                [&propCache, &lmaPropCache, &randomWallSource, &solveGammas,
+                 fermIn, fermOut, fermGuess, &U, UGrid, &lmaSolvers, hasEigs](
+                    const std::string &actionLabel, size_t aIdx,
+                    const std::string &solverType, SolverFunc &solver,
+                    const std::vector<StagGamma::SpinTastePair> &gammaKeys) {
+                  StagGamma gamma;
+                  gamma.setGaugeField(U);
+                  PropagatorFieldD gammaProp(UGrid);
+
+                  for (const auto &gKey : gammaKeys) {
+                    std::string gammaName = StagGamma::GetName(gKey);
+                    auto cacheKey =
+                        std::make_tuple(actionLabel, solverType, gammaName);
+
+                    if (propCache.find(cacheKey) != propCache.end())
+                      continue;
+
+                    // If MPCG, ensure LMA solve exists for guess
+                    if (solverType == "mpcg" && hasEigs) {
+                      auto lmaCacheKey =
+                          std::make_tuple(actionLabel, std::string("lma"),
+                                          gammaName);
+                      if (propCache.find(lmaCacheKey) == propCache.end()) {
                         std::cout << GridLogMessage
-                                  << "Solving gamma: " << gammaPair.first
-                                  << std::endl;
-                        propMap.emplace(gammaPair.first, UGrid);
-                        propMap.at(gammaPair.first) = Zero();
+                                  << "Pre-solving LMA for MPCG guess: "
+                                  << gammaName << " (action '" << actionLabel
+                                  << "')" << std::endl;
+                        propCache.emplace(
+                            std::piecewise_construct,
+                            std::forward_as_tuple(lmaCacheKey),
+                            std::forward_as_tuple(UGrid));
+                        propCache.at(lmaCacheKey) = Zero();
 
-                        *fermIn = Zero();
-                        *fermOut = Zero();
-                        gamma.setSpinTaste(gammaPair.second);
-
+                        gamma.setSpinTaste(solveGammas.at(gammaName));
                         gammaProp = Zero();
                         gamma(gammaProp, randomWallSource);
 
                         for (int c = 0; c < 3; c++) {
                           PropToFerm<FImpl>(*fermIn, gammaProp, c);
-
-                          std::cout
-                              << GridLogMessage << "doSolves"
-                              << (fermGuess == nullptr ? "Null" : "Not Null")
-                              << std::endl;
-                          if (fermGuess != nullptr) {
-                            PropToFerm<FImpl>(*fermGuess,
-                                              lmaProp.at(gammaPair.first), c);
-                          }
-                          solver();
-                          FermToProp<FImpl>(propMap.at(gammaPair.first),
-                                            *fermOut, c);
+                          *fermOut = Zero();
+                          lmaSolvers[aIdx]();
+                          FermToProp<FImpl>(propCache.at(lmaCacheKey), *fermOut,
+                                            c);
                         }
                       }
                     }
-                  };
 
-              if (hasEigs) {
-                std::cout << GridLogMessage << "Solving with LMA solver"
-                          << std::endl;
-                doSolves(lmaProp, lmaSolvers[aIdx]);
-              }
-              if (!corrPar.amaOutput.empty()) {
-                std::cout << GridLogMessage << "Solving with MPCG solver"
-                          << std::endl;
-                doSolves(mpcgProp, mpcgSolvers[aIdx]);
-              }
+                    std::cout << GridLogMessage << "Solving gamma: " << gammaName
+                              << " (action '" << actionLabel << "', solver '"
+                              << solverType << "')" << std::endl;
+                    propCache.emplace(std::piecewise_construct,
+                                      std::forward_as_tuple(cacheKey),
+                                      std::forward_as_tuple(UGrid));
+                    propCache.at(cacheKey) = Zero();
 
-              auto doContractions =
-                  [&gammaProp, &solveGammas, &mesonResults, t0, Nt,
-                   &antiquarkGammaName, &U,
-                   UGrid](std::map<std::string, PropagatorFieldD> &propMap) {
-                    StagGamma gamma;
-                    gamma.setGaugeField(U);
-                    // Accumulate meson contraction results for this source
-                    for (size_t i = 0; i < mesonResults.size(); ++i) {
-                      std::string quarkGammaName = mesonResults[i].sourceGamma;
-                      std::string sinkGammaName = mesonResults[i].sinkGamma;
-                      std::cout
-                          << GridLogMessage
+                    *fermIn = Zero();
+                    *fermOut = Zero();
+                    gamma.setSpinTaste(solveGammas.at(gammaName));
+
+                    gammaProp = Zero();
+                    gamma(gammaProp, randomWallSource);
+
+                    for (int c = 0; c < 3; c++) {
+                      PropToFerm<FImpl>(*fermIn, gammaProp, c);
+
+                      if (solverType == "mpcg" && hasEigs &&
+                          fermGuess != nullptr) {
+                        auto lmaCacheKey =
+                            std::make_tuple(actionLabel, std::string("lma"),
+                                            gammaName);
+                        PropToFerm<FImpl>(*fermGuess,
+                                          propCache.at(lmaCacheKey), c);
+                      }
+                      solver();
+                      FermToProp<FImpl>(propCache.at(cacheKey), *fermOut, c);
+                    }
+                  }
+                };
+
+            // Solve quark gammas
+            SolverFunc *quarkSolver =
+                resolveSolver(corrPar.quarkSolver, quarkActionIdx);
+            doSolves(corrPar.quarkAction, quarkActionIdx, corrPar.quarkSolver,
+                     *quarkSolver, quarkGammaKeys);
+
+            // Solve antiquark gammas
+            SolverFunc *antiquarkSolver =
+                resolveSolver(corrPar.antiquarkSolver, antiquarkActionIdx);
+            doSolves(corrPar.antiquarkAction, antiquarkActionIdx,
+                     corrPar.antiquarkSolver, *antiquarkSolver,
+                     antiquarkGammaKeys);
+
+            // Initialize meson results
+            std::vector<MesonResult> mesonResults(quarkGammaKeys.size());
+            for (size_t gi = 0; gi < quarkGammaKeys.size(); ++gi) {
+              std::string quarkGammaName =
+                  StagGamma::GetName(quarkGammaKeys[gi]);
+              std::string sinkGammaName =
+                  StagGamma::GetName(sinkGammaKeys[gi]);
+
+              mesonResults[gi].sourceGamma = quarkGammaName;
+              mesonResults[gi].sinkGamma = sinkGammaName;
+              mesonResults[gi].corr.resize(Nt, 0.0);
+              mesonResults[gi].srcCorrs.resize(
+                  nVecs, std::vector<Complex>(Nt, 0.0));
+              mesonResults[gi].scaling = nVecs;
+            }
+
+            // Contract
+            {
+              StagGamma gamma;
+              gamma.setGaugeField(U);
+              PropagatorFieldD gammaProp(UGrid);
+
+              for (size_t gi = 0; gi < mesonResults.size(); ++gi) {
+                std::string quarkGammaName = mesonResults[gi].sourceGamma;
+                std::string sinkGammaName = mesonResults[gi].sinkGamma;
+                std::cout << GridLogMessage
                           << "Contracting source gamma: " << quarkGammaName
                           << ", sink gamma: " << sinkGammaName << std::endl;
-                      gamma.setSpinTaste(solveGammas.at(sinkGammaName));
+                gamma.setSpinTaste(solveGammas.at(sinkGammaName));
 
-                      PropagatorFieldD prod(UGrid);
-                      gamma(gammaProp, propMap.at(quarkGammaName));
-                      prod = propMap.at(antiquarkGammaName) * adj(gammaProp);
+                auto quarkKey = std::make_tuple(
+                    corrPar.quarkAction, corrPar.quarkSolver, quarkGammaName);
+                auto antiquarkKey =
+                    std::make_tuple(corrPar.antiquarkAction,
+                                    corrPar.antiquarkSolver, antiquarkGammaName);
 
-                      std::vector<TComplex> buf;
-                      LatticeComplexD slicedTrace = trace(prod);
-                      sliceSum(slicedTrace, buf, Tp);
-                      int sliceOffset = t0;
-                      for (int t = 0; t < Nt; ++t) {
-                        Complex ct = TensorRemove(buf[sliceOffset]);
-                        mesonResults[i].srcCorrs[0][t] = ct;
-                        sliceOffset = mod(sliceOffset + 1, Nt);
-                      }
-                    }
+                PropagatorFieldD prod(UGrid);
+                gamma(gammaProp, propCache.at(quarkKey));
+                prod = propCache.at(antiquarkKey) * adj(gammaProp);
 
-                    // Compute averaged correlators from all sources
-                    for (size_t i = 0; i < mesonResults.size(); ++i) {
-                      for (int t = 0; t < Nt; ++t) {
-                        mesonResults[i].corr[t] = 0.0;
-                        for (int j = 0; j < mesonResults[i].scaling; j++) {
-                          mesonResults[i].corr[t] +=
-                              mesonResults[i].srcCorrs[j][t];
-                        }
-                        mesonResults[i].corr[t] /= mesonResults[i].scaling;
-                      }
-                    }
-                  };
-
-              if (!corrPar.lmaOutput.empty() && hasEigs) {
-                std::cout << GridLogMessage << "Contracting LMA propagators"
-                          << std::endl;
-                doContractions(lmaProp);
-                saveResult(UGrid, corrPar.lmaOutput + massSuffix, "meson",
-                           mesonResults, inputParams, t0);
+                std::vector<TComplex> buf;
+                LatticeComplexD slicedTrace = trace(prod);
+                sliceSum(slicedTrace, buf, Tp);
+                int sliceOffset = t0;
+                for (int t = 0; t < Nt; ++t) {
+                  Complex ct = TensorRemove(buf[sliceOffset]);
+                  mesonResults[gi].srcCorrs[0][t] = ct;
+                  sliceOffset = mod(sliceOffset + 1, Nt);
+                }
               }
-              if (!corrPar.amaOutput.empty()) {
-                std::cout << GridLogMessage
-                          << "Contracting AMA (MPCG) propagators" << std::endl;
-                doContractions(mpcgProp);
-                saveResult(UGrid, corrPar.amaOutput + massSuffix, "meson",
-                           mesonResults, inputParams, t0);
+
+              // Compute averaged correlators
+              for (size_t gi = 0; gi < mesonResults.size(); ++gi) {
+                for (int t = 0; t < Nt; ++t) {
+                  mesonResults[gi].corr[t] = 0.0;
+                  for (int si = 0; si < mesonResults[gi].scaling; si++) {
+                    mesonResults[gi].corr[t] +=
+                        mesonResults[gi].srcCorrs[si][t];
+                  }
+                  mesonResults[gi].corr[t] /= mesonResults[gi].scaling;
+                }
               }
+            }
+
+            if (!corrPar.output.empty()) {
+              std::cout << GridLogMessage << "Saving correlator to "
+                        << corrPar.output << std::endl;
+              saveResult(UGrid, corrPar.output, "meson", mesonResults,
+                         inputParams, t0);
             }
           }
         }

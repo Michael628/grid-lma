@@ -52,9 +52,10 @@ typedef XmlWriter ResultWriter;
 // ============================================================================
 class ImprovedStaggeredPar : Serializable {
 public:
-  GRID_SERIALIZABLE_CLASS_MEMBERS(ImprovedStaggeredPar, double, mass, double,
-                                  c1, double, c2, double, tad, std::string,
-                                  boundary, std::string, twist);
+  GRID_SERIALIZABLE_CLASS_MEMBERS(ImprovedStaggeredPar, std::string, label,
+                                  double, mass, double, c1, double, c2, double,
+                                  tad, std::string, boundary, std::string,
+                                  twist);
 
   std::string parString(void) const {
     XmlWriter writer("", "");
@@ -117,8 +118,10 @@ class ContractionPar : Serializable {
 public:
   GRID_SERIALIZABLE_CLASS_MEMBERS(ContractionPar, SpinTasteParams, quark,
                                   SpinTasteParams, antiquark, SpinTasteParams,
-                                  sink, std::string, lmaOutput, std::string,
-                                  amaOutput);
+                                  sink, std::string, quarkAction, std::string,
+                                  antiquarkAction, std::string, quarkSolver,
+                                  std::string, antiquarkSolver, std::string,
+                                  output);
 };
 
 class MesonResult : Serializable {
