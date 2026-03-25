@@ -1,3 +1,6 @@
+#ifndef FMGRID_EIGENPACK_H
+#define FMGRID_EIGENPACK_H
+
 #include <Grid/Grid.h>
 #include <Grid/algorithms/deflation/Deflation.h>
 #include <IO.h>
@@ -147,6 +150,7 @@ void writeElement(ScidacWriter &binWriter, T &evec, RealD &eval,
                   const unsigned int index) {
   VecRecord vecRecord;
 
+  std::cout << GridLogMessage << "Writing eigenvector " << index << std::endl;
   vecRecord.eval = eval;
   vecRecord.index = index;
   binWriter.writeScidacFieldRecord(evec, vecRecord, DEFAULT_ASCII_PREC);
@@ -309,3 +313,4 @@ using MassShiftEigenPack = AdaptorEigenPackMILC<typename FImpl::FermionField>;
 NAMESPACE_END(Grid);
 
 #undef DEFAULT_ASCII_PREC
+#endif
