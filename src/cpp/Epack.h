@@ -4,16 +4,17 @@
 #include <Eigenpack.h>
 #include <Grid/Grid.h>
 #include <IO.h>
+#include <ImplicitlyRestartedLanczos.h>
 
 NAMESPACE_BEGIN(Grid);
 
 template <typename FermionOpD, typename FermionFieldD>
-std::shared_ptr<EigenPack<FermionFieldD>> loadOrSolveEigenpack(
-    const EpackPar &epackPar, GlobalPar &inputParams,
-    GridCartesian *UGrid, GridRedBlackCartesian *UrbGrid,
-    GridParallelRNG &rng, LatticeGaugeFieldD &U_fat,
-    LatticeGaugeFieldD &U_long,
-    typename FermionOpD::ImplParams &implParams, int traj) {
+std::shared_ptr<EigenPack<FermionFieldD>>
+loadOrSolveEigenpack(const EpackPar &epackPar, GlobalPar &inputParams,
+                     GridCartesian *UGrid, GridRedBlackCartesian *UrbGrid,
+                     GridParallelRNG &rng, LatticeGaugeFieldD &U_fat,
+                     LatticeGaugeFieldD &U_long,
+                     typename FermionOpD::ImplParams &implParams, int traj) {
 
   auto epack = std::make_shared<EigenPack<FermionFieldD>>();
   int cb = epackPar.checker;
@@ -53,15 +54,14 @@ std::shared_ptr<EigenPack<FermionFieldD>> loadOrSolveEigenpack(
     auto stagMatIRL = makeActionD(actionParIRL);
 
     SchurStaggeredOperator<FermionOpD, FermionFieldD> hermOpIRL(*stagMatIRL);
-    Chebyshev<FermionFieldD> Cheby(lanczosPar.Cheby.alpha,
-                                   lanczosPar.Cheby.beta,
-                                   lanczosPar.Cheby.Npoly);
+    Chebyshev<FermionFieldD> Cheby(
+        lanczosPar.Cheby.alpha, lanczosPar.Cheby.beta, lanczosPar.Cheby.Npoly);
 
     FunctionHermOp<FermionFieldD> OpCheby(Cheby, hermOpIRL);
     PlainHermOp<FermionFieldD> Op(hermOpIRL);
 
-    ImplicitlyRestartedLanczos<FermionFieldD> IRL(OpCheby, Op, Nstop, Nk, Nm,
-                                                  resid, MaxIt);
+    ImplicitlyRestartedLanczosFM<FermionFieldD> IRL(OpCheby, Op, Nstop, Nk, Nm,
+                                                    resid, MaxIt);
 
     FermionFieldD src(UrbGrid);
 
@@ -105,8 +105,8 @@ std::shared_ptr<EigenPack<FermionFieldD>> loadOrSolveEigenpack(
   }
 
   if (!epackPar.evalSave.empty()) {
-    std::cout << GridLogMessage << "Saving eigenvalues to "
-              << epackPar.evalSave << std::endl;
+    std::cout << GridLogMessage << "Saving eigenvalues to " << epackPar.evalSave
+              << std::endl;
     saveResult(UGrid, epackPar.evalSave, "evals", epack->eval, inputParams,
                "h5", false);
   }
