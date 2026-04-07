@@ -172,7 +172,7 @@ public:
   friend inline StagGamma operator*(const StagGamma &g1, const StagGamma &g2);
 
   static void print(const StagGamma &g) {
-    std::cout << GridLogMessage << "StagGamma: spin=" << g._spin
+    std::cout << GridLogDebug << "StagGamma: spin=" << g._spin
               << " taste=" << g._taste
               << " oscillateDirs=" << (int)g._oscillateDirs
               << " negated=" << g._negated << " scaling=" << g._scaling

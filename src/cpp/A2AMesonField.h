@@ -141,7 +141,12 @@ void computeA2AMesonFields(
 
     if (gammaLocal.size() > 0) {
       mesonData.setGammas(gammaLocal);
-      kernel.setWorker(UGrid, *ph, gammaLocal, orthogDir);
+      if (a2aPar.workerType == MesonFieldPar::A2AWorkerType::fused) {
+        std::cout << GridLogMessage << "Using fused A2A worker" << std::endl;
+        kernel.setWorkerFused(UGrid, *ph, gammaLocal, orthogDir);
+      } else {
+        kernel.setWorker(UGrid, *ph, gammaLocal, orthogDir);
+      }
       computationLocal->execute(kernel, mesonData);
     }
     if (gammaComms.size() > 0) {

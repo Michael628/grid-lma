@@ -3,6 +3,7 @@
 #include <Grid/Grid_Eigen_Tensor.h>
 #include <StagGamma.h>
 #include <a2a/A2ATask.h>
+#include <a2a/A2ATaskFused.h>
 
 NAMESPACE_BEGIN(Grid);
 
@@ -130,6 +131,27 @@ public:
     // A2ATaskOnelink<FImpl>(grid,orthogDir,dynamic_cast<A2ATaskOnelink<FImpl>
     // &>(*this->_task_e),{},Odd,U);
     // }
+  }
+};
+
+template <typename FImpl> class A2AWorkerFused : public A2AWorkerBase<FImpl> {
+public:
+  typedef typename FImpl::ComplexField ComplexField;
+  typedef typename FImpl::FermionField FermionField;
+  typedef typename FImpl::SiteSpinor vobj;
+  typedef typename vobj::scalar_type scalar_type;
+
+public:
+  A2AWorkerFused() = delete;
+  A2AWorkerFused(GridBase *grid, const std::vector<ComplexField> &mom,
+                 const std::vector<StagGamma::SpinTastePair> &gammas,
+                 int orthogDir)
+      : A2AWorkerBase<FImpl>(grid) {
+    this->_odd_shifts = false;
+    this->_task_e = new A2ATaskFused<FImpl>(grid, orthogDir, gammas, Even);
+    this->_task_o = new A2ATaskFused<FImpl>(
+        grid, orthogDir,
+        dynamic_cast<A2ATaskFused<FImpl> &>(*this->_task_e), gammas, Odd);
   }
 };
 

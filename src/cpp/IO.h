@@ -146,10 +146,15 @@ public:
 
 class MesonFieldPar : Serializable {
 public:
+  GRID_SERIALIZABLE_ENUM(A2AWorkerType, undef, standard, 0, fused, 1);
+
   GRID_SERIALIZABLE_CLASS_MEMBERS(MesonFieldPar, int, block,
                                   ImprovedStaggeredPar, action, std::string,
                                   output, SpinTasteParams, spinTaste,
-                                  std::vector<std::string>, mom);
+                                  std::vector<std::string>, mom,
+                                  A2AWorkerType, workerType);
+
+  MesonFieldPar() : workerType(A2AWorkerType::standard) {}
 };
 
 // ============================================================================

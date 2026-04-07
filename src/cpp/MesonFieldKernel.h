@@ -55,6 +55,12 @@ public:
     _worker =
         std::make_unique<A2AWorkerLocal<FImpl>>(grid, mom, gammas, orthogDir);
   }
+  void setWorkerFused(GridBase *grid, const std::vector<ComplexField> &mom,
+                      const std::vector<StagGamma::SpinTastePair> &gammas,
+                      int orthogDir) {
+    _worker =
+        std::make_unique<A2AWorkerFused<FImpl>>(grid, mom, gammas, orthogDir);
+  }
 
 private:
   template <typename TFImpl, typename... Args>
