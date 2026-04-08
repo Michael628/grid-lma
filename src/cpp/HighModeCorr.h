@@ -19,8 +19,7 @@ void computeHighModeCorrelators(
     GridRedBlackCartesian *UrbGridF, GridParallelRNG &rng,
     LatticeGaugeFieldD &U, LatticeGaugeFieldD &U_fat,
     LatticeGaugeFieldD &U_long, LatticeGaugeFieldF &U_fat_f,
-    LatticeGaugeFieldF &U_long_f,
-    typename FermionOpD::ImplParams &implParams,
+    LatticeGaugeFieldF &U_long_f, typename FermionOpD::ImplParams &implParams,
     std::shared_ptr<EigenPack<typename FImpl::FermionField>> epack) {
 
   using FermionFieldD = typename FImpl::FermionField;
@@ -105,11 +104,11 @@ void computeHighModeCorrelators(
   }
 
   // Lambda to create LMA solver function
-  auto makeLMASolver = [epack, rbFerm, rbFermNeg, MrbFermNeg, rbTemp,
-                        rbTempNeg, fermOut,
-                        fermIn](std::shared_ptr<FermionOpD> actionMat,
-                                RealD sMass, bool projectorFlag,
-                                unsigned int eStart, int nE, bool subGuess) {
+  auto makeLMASolver = [epack, rbFerm, rbFermNeg, MrbFermNeg, rbTemp, rbTempNeg,
+                        fermOut, fermIn](std::shared_ptr<FermionOpD> actionMat,
+                                         RealD sMass, bool projectorFlag,
+                                         unsigned int eStart, int nE,
+                                         bool subGuess) {
     return [actionMat, epack, subGuess, sMass, projectorFlag, eStart, nE,
             rbFerm, rbFermNeg, MrbFermNeg, rbTemp, rbTempNeg, fermOut,
             fermIn]() {
@@ -187,8 +186,8 @@ void computeHighModeCorrelators(
     auto temp = std::make_shared<FermionFieldD>(UGrid);
     auto &mpcgPar = inputParams.mpcg;
 
-    return [actionMatD, subGuess, fermOut, fermIn, fermGuess, temp,
-            hermOpInner, hermOpOuter, &UGridF, &mpcgPar]() {
+    return [actionMatD, subGuess, fermOut, fermIn, fermGuess, temp, hermOpInner,
+            hermOpOuter, &UGridF, &mpcgPar]() {
       MixedPrecisionConjugateGradient<FermionFieldD, FermionFieldF> mpcg(
           mpcgPar.residual, mpcgPar.maxInnerIteration,
           mpcgPar.maxOuterIteration, UGridF, *hermOpInner, *hermOpOuter);
@@ -311,8 +310,7 @@ void computeHighModeCorrelators(
       exit(1);
     }
     TimeDilutedNoise<FImpl> noise(UGrid, nSrc);
-    std::string seed =
-        getSeed(inputParams, sourcePar.seed);
+    std::string seed = getSeed(inputParams, sourcePar.seed);
     std::cout << GridLogMessage << "Seeding source with seed '" << seed << "'"
               << std::endl;
     rng.SeedUniqueString(seed);
@@ -348,8 +346,7 @@ void computeHighModeCorrelators(
           std::cout << GridLogMessage << "Setting up meson contraction"
                     << std::endl;
 
-          auto quarkGammaKeys =
-              StagGamma::ParseSpinTaste(corrPar.quark.gammas);
+          auto quarkGammaKeys = StagGamma::ParseSpinTaste(corrPar.quark.gammas);
           auto quarkGammaVals = StagGamma::ParseSpinTaste(
               corrPar.quark.gammas, corrPar.quark.applyG5);
           GRID_ASSERT(!quarkGammaKeys.empty());
@@ -363,10 +360,9 @@ void computeHighModeCorrelators(
               StagGamma::GetName(antiquarkGammaKeys[0]);
           StagGamma::SpinTastePair antiquarkSpinTaste = antiquarkGammaVals[0];
 
-          auto sinkGammaKeys =
-              StagGamma::ParseSpinTaste(corrPar.sink.gammas);
-          auto sinkGammaVals = StagGamma::ParseSpinTaste(
-              corrPar.sink.gammas, corrPar.sink.applyG5);
+          auto sinkGammaKeys = StagGamma::ParseSpinTaste(corrPar.sink.gammas);
+          auto sinkGammaVals = StagGamma::ParseSpinTaste(corrPar.sink.gammas,
+                                                         corrPar.sink.applyG5);
           GRID_ASSERT(sinkGammaKeys.size() == quarkGammaKeys.size());
 
           std::map<std::string, StagGamma::SpinTastePair> solveGammas;
@@ -385,88 +381,91 @@ void computeHighModeCorrelators(
                     << "' (" << corrPar.antiquarkSolver << ")" << std::endl;
 
           // Lambda to solve a set of gammas with a given action+solver
-          auto doSolves =
-              [&propCache, &lmaPropCache, &randomWallSource, &solveGammas,
-               fermIn, fermOut, fermGuess, &U, UGrid, &lmaSolvers, hasEigs](
-                  const std::string &actionLabel, size_t aIdx,
-                  const std::string &solverType, SolverFunc &solver,
-                  const std::vector<StagGamma::SpinTastePair> &gammaKeys) {
-                StagGamma gamma;
-                gamma.setGaugeField(U);
-                PropagatorFieldD gammaProp(UGrid);
+          auto doSolves = [&propCache, &lmaPropCache, &randomWallSource,
+                           &solveGammas, fermIn, fermOut, fermGuess, &U, UGrid,
+                           &lmaSolvers, hasEigs](
+                              const std::string &actionLabel, size_t aIdx,
+                              const std::string &solverType, SolverFunc &solver,
+                              const std::vector<StagGamma::SpinTastePair>
+                                  &gammaKeys) {
+            StagGamma gamma;
+            gamma.setGaugeField(U);
+            PropagatorFieldD gammaProp(UGrid);
 
-                for (const auto &gKey : gammaKeys) {
-                  std::string gammaName = StagGamma::GetName(gKey);
-                  auto cacheKey =
-                      std::make_tuple(actionLabel, solverType, gammaName);
+            for (const auto &gKey : gammaKeys) {
+              std::string gammaName = StagGamma::GetName(gKey);
+              auto cacheKey =
+                  std::make_tuple(actionLabel, solverType, gammaName);
 
-                  if (propCache.find(cacheKey) != propCache.end())
-                    continue;
+              if (propCache.find(cacheKey) != propCache.end())
+                continue;
 
-                  // If MPCG, ensure LMA solve exists for guess
-                  if (solverType == "mpcg" && hasEigs) {
-                    auto lmaCacheKey = std::make_tuple(
-                        actionLabel, std::string("lma"), gammaName);
-                    if (propCache.find(lmaCacheKey) == propCache.end()) {
-                      std::cout << GridLogMessage
-                                << "Pre-solving LMA for MPCG guess: "
-                                << gammaName << " (action '" << actionLabel
-                                << "')" << std::endl;
-                      propCache.emplace(std::piecewise_construct,
-                                        std::forward_as_tuple(lmaCacheKey),
-                                        std::forward_as_tuple(UGrid));
-                      propCache.at(lmaCacheKey) = Zero();
-
-                      gamma.setSpinTaste(solveGammas.at(gammaName));
-                      gammaProp = Zero();
-                      gamma(gammaProp, randomWallSource);
-
-                      for (int c = 0; c < 3; c++) {
-                        PropToFerm<FImpl>(*fermIn, gammaProp, c);
-                        *fermOut = Zero();
-                        lmaSolvers[aIdx]();
-                        FermToProp<FImpl>(propCache.at(lmaCacheKey), *fermOut,
-                                          c);
-                      }
-                    }
-                  }
-
-                  std::cout << GridLogMessage << "Solving gamma: " << gammaName
-                            << " (action '" << actionLabel << "', solver '"
-                            << solverType << "')" << std::endl;
+              // If MPCG, ensure LMA solve exists for guess
+              if (solverType == "mpcg" && hasEigs) {
+                auto lmaCacheKey =
+                    std::make_tuple(actionLabel, std::string("lma"), gammaName);
+                if (propCache.find(lmaCacheKey) == propCache.end()) {
+                  std::cout << GridLogMessage
+                            << "Pre-solving LMA for MPCG guess: " << gammaName
+                            << " (action '" << actionLabel << "')" << std::endl;
                   propCache.emplace(std::piecewise_construct,
-                                    std::forward_as_tuple(cacheKey),
+                                    std::forward_as_tuple(lmaCacheKey),
                                     std::forward_as_tuple(UGrid));
-                  propCache.at(cacheKey) = Zero();
+                  propCache.at(lmaCacheKey) = Zero();
 
-                  *fermIn = Zero();
-                  *fermOut = Zero();
                   gamma.setSpinTaste(solveGammas.at(gammaName));
-
                   gammaProp = Zero();
                   gamma(gammaProp, randomWallSource);
 
                   for (int c = 0; c < 3; c++) {
                     PropToFerm<FImpl>(*fermIn, gammaProp, c);
-
-                    if (solverType == "mpcg" && hasEigs &&
-                        fermGuess != nullptr) {
-                      auto lmaCacheKey = std::make_tuple(
-                          actionLabel, std::string("lma"), gammaName);
-                      PropToFerm<FImpl>(*fermGuess, propCache.at(lmaCacheKey),
-                                        c);
-                    }
-                    solver();
-                    FermToProp<FImpl>(propCache.at(cacheKey), *fermOut, c);
+                    *fermOut = Zero();
+                    lmaSolvers[aIdx]();
+                    FermToProp<FImpl>(propCache.at(lmaCacheKey), *fermOut, c);
                   }
                 }
-              };
+              }
+
+              std::cout << GridLogMessage << "Solving gamma: " << gammaName
+                        << " (action '" << actionLabel << "', solver '"
+                        << solverType << "')" << std::endl;
+              propCache.emplace(std::piecewise_construct,
+                                std::forward_as_tuple(cacheKey),
+                                std::forward_as_tuple(UGrid));
+              propCache.at(cacheKey) = Zero();
+
+              *fermIn = Zero();
+              *fermOut = Zero();
+              gamma.setSpinTaste(solveGammas.at(gammaName));
+
+              gammaProp = Zero();
+              gamma(gammaProp, randomWallSource);
+
+              for (int c = 0; c < 3; c++) {
+                PropToFerm<FImpl>(*fermIn, gammaProp, c);
+
+                if (solverType == "mpcg" && hasEigs && fermGuess != nullptr) {
+                  auto lmaCacheKey = std::make_tuple(
+                      actionLabel, std::string("lma"), gammaName);
+                  PropToFerm<FImpl>(*fermGuess, propCache.at(lmaCacheKey), c);
+                }
+                solver();
+                FermToProp<FImpl>(propCache.at(cacheKey), *fermOut, c);
+              }
+            }
+          };
 
           // Solve quark gammas
           SolverFunc *quarkSolver =
               resolveSolver(corrPar.quarkSolver, quarkActionIdx);
+          if (GridLogPerformance.isActive()) {
+            MemoryManager::Print();
+          }
           doSolves(corrPar.quarkAction, quarkActionIdx, corrPar.quarkSolver,
                    *quarkSolver, quarkGammaKeys);
+          if (GridLogPerformance.isActive()) {
+            MemoryManager::Print();
+          }
 
           // Solve antiquark gammas
           SolverFunc *antiquarkSolver =
@@ -475,13 +474,14 @@ void computeHighModeCorrelators(
                    corrPar.antiquarkSolver, *antiquarkSolver,
                    antiquarkGammaKeys);
 
+          if (GridLogPerformance.isActive()) {
+            MemoryManager::Print();
+          }
           // Initialize meson results
           std::vector<MesonResult> mesonResults(quarkGammaKeys.size());
           for (size_t gi = 0; gi < quarkGammaKeys.size(); ++gi) {
-            std::string quarkGammaName =
-                StagGamma::GetName(quarkGammaKeys[gi]);
-            std::string sinkGammaName =
-                StagGamma::GetName(sinkGammaKeys[gi]);
+            std::string quarkGammaName = StagGamma::GetName(quarkGammaKeys[gi]);
+            std::string sinkGammaName = StagGamma::GetName(sinkGammaKeys[gi]);
 
             mesonResults[gi].sourceGamma = quarkGammaName;
             mesonResults[gi].sinkGamma = sinkGammaName;

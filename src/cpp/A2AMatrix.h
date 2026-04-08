@@ -342,7 +342,7 @@ void A2AMatrixIo<T>::load(Vec<VecT> &v, double *tRead, GridBase *grid) {
                                    static_cast<hsize_t>(_nj)};
   H5NS::DataSpace memspace(memCount.size(), memCount.data());
 
-  std::cout << "Loading timeslice";
+  std::cout << GridLogMessage << "Loading timeslice";
   std::cout.flush();
   *tRead = 0.;
   if (grid) {
