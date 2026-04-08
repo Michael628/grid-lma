@@ -559,7 +559,9 @@ private:
       OrthoTimer.Reset();
       LinalgTimer.Reset();
 
-      MemoryManager::Print();
+      if (GridLogPerformance.isActive()) {
+        MemoryManager::PrintAll();
+      }
     }
 
     if (beta < tiny)
