@@ -36,6 +36,9 @@ all: grid_lma
 # Configure arguments (can be overridden on command line)
 CONFIGURE_ARGS ?=
 
+test_irl_leak: ../src/Test_irl_leak.cc
+	$(COMPILER) $(INCLUDES) -o $@ $(CXXFLAGS) ../src/Test_irl_leak.cc $(LDFLAGS) $(LIBS)
+
 grid_lma: ../src/Grid_LMA.cc
 	$(COMPILER) $(INCLUDES) -o $@ $(GPUFLAGS) $(CXXFLAGS)  ../src/Grid_LMA.cc ../src/cpp/TimerArray.cc ../src/cpp/IO.cc  $(LDFLAGS) $(LIBS)
 
