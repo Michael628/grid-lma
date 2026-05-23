@@ -503,23 +503,42 @@ private:
 
     StepTimer.Start();
 
+    GRID_TRACE("IRL step");
+
     Field &evec_k = evec[k];
 
     PolyOpTimer.Start();
-    _PolyOp(evec_k, w);
+    {
+      GRID_TRACE("IRL step PolyOp");
+      _PolyOp(evec_k, w);
+    }
     PolyOpTimer.Stop();
     std::cout << GridLogDebug << "PolyOp" << std::endl;
 
     LinalgTimer.Start();
-    if (k > 0)
-      w -= lme[k - 1] * evec[k - 1];
+    {
+      GRID_TRACE("IRL step subtract previous");
+      if (k > 0)
+        w -= lme[k - 1] * evec[k - 1];
+    }
 
-    ComplexD zalph = innerProduct(evec_k, w);
+    ComplexD zalph;
+    {
+      GRID_TRACE("IRL step innerProduct");
+      zalph = innerProduct(evec_k, w);
+    }
     RealD alph = real(zalph);
 
-    w = w - alph * evec_k;
+    {
+      GRID_TRACE("IRL step alpha update");
+      w = w - alph * evec_k;
+    }
 
-    RealD beta = normalise(w);
+    RealD beta;
+    {
+      GRID_TRACE("IRL step normalise");
+      beta = normalise(w);
+    }
     LinalgTimer.Stop();
 
     lmd[k] = alph;
@@ -528,13 +547,19 @@ private:
     if ((k > 0) && ((k % orth_period) == 0)) {
       std::cout << GridLogDebug << "Orthogonalising " << k << std::endl;
       OrthoTimer.Start();
-      orthogonalize(w, evec, k); // orthonormalise
+      {
+        GRID_TRACE("IRL step orthogonalize");
+        orthogonalize(w, evec, k); // orthonormalise
+      }
       OrthoTimer.Stop();
       std::cout << GridLogDebug << "Orthogonalised " << k << std::endl;
     }
 
-    if (k < Nm - 1)
-      evec[k + 1] = w;
+    {
+      GRID_TRACE("IRL step store next");
+      if (k < Nm - 1)
+        evec[k + 1] = w;
+    }
 
     StepTimer.Stop();
     stepCount++;
