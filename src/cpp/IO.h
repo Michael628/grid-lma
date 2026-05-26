@@ -89,7 +89,8 @@ class MixedPrecisionCGPar : Serializable {
 public:
   GRID_SERIALIZABLE_CLASS_MEMBERS(MixedPrecisionCGPar, unsigned int,
                                   maxInnerIteration, unsigned int,
-                                  maxOuterIteration, double, residual);
+                                  maxOuterIteration, double, residual, bool,
+                                  mixedPrecision);
 };
 
 // ============================================================================

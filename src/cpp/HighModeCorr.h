@@ -172,6 +172,50 @@ void computeHighModeCorrelators(
     };
   };
 
+  // Lambda to create CG solver function
+  auto makeCGSolver = [fermOut, fermIn, fermGuess, &UGrid,
+                       &inputParams](std::shared_ptr<FermionOpD> actionMatD,
+                                     bool subGuess) {
+    auto hermOp =
+        std::make_shared<MdagMLinearOperator<FermionOpD, FermionFieldD>>(
+            *actionMatD);
+    auto temp = std::make_shared<FermionFieldD>(UGrid);
+    auto &mpcgPar = inputParams.mpcg;
+
+    return [actionMatD, subGuess, fermOut, fermIn, fermGuess, temp, hermOp,
+            &mpcgPar]() {
+      ConjugateGradient<FermionFieldD> cg(mpcgPar.residual,
+                                          mpcgPar.maxOuterIteration);
+
+      std::cout << GridLogMessage << "CG"
+                << (fermGuess == nullptr ? "Null" : "Not Null") << std::endl;
+      if (fermGuess != nullptr) {
+        *fermOut = *fermGuess;
+      } else {
+        *fermOut = 1.0;
+      }
+
+      *temp = Zero();
+      actionMatD->Mdag(*fermIn, *temp);
+
+      cg(*hermOp, *temp, *fermOut);
+
+      actionMatD->M(*fermOut, *temp);
+      *temp = *temp - *fermIn;
+
+      RealD ns = norm2(*fermIn);
+      RealD nr = norm2(*temp);
+      RealD relres = (ns > 0.0) ? std::sqrt(nr / ns) : 0.0;
+
+      std::cout << GridLogMessage << "CG: Final true residual = " << relres
+                << std::endl;
+
+      if (subGuess && fermGuess != nullptr) {
+        *fermOut = *fermOut - *fermGuess;
+      }
+    };
+  };
+
   // Lambda to create MPCG solver function
   auto makeMPCGSolver = [fermOut, fermIn, fermGuess, &UGrid, &UGridF,
                          &inputParams](std::shared_ptr<FermionOpD> actionMatD,
@@ -207,9 +251,7 @@ void computeHighModeCorrelators(
 
       mpcg(*temp, *fermOut);
 
-      RealD nsol = norm2(*fermOut);
       actionMatD->M(*fermOut, *temp);
-      RealD nMsol = norm2(*temp);
       *temp = *temp - *fermIn;
 
       RealD ns = norm2(*fermIn);
@@ -232,7 +274,7 @@ void computeHighModeCorrelators(
   std::vector<std::shared_ptr<FermionOpF>> actionMatsF(nActions);
   std::vector<RealD> actionMasses(nActions);
   std::vector<SolverFunc> lmaSolvers(nActions);
-  std::vector<SolverFunc> mpcgSolvers(nActions);
+  std::vector<SolverFunc> cgSolvers(nActions);
 
   for (size_t aIdx = 0; aIdx < nActions; ++aIdx) {
     auto &actionPar = inputParams.highModeActions[aIdx];
@@ -251,14 +293,20 @@ void computeHighModeCorrelators(
     }
 
     auto &mpcgPar = inputParams.mpcg;
-    std::cout << GridLogMessage
-              << "Setting up mixed-precision CG solver for action '"
-              << actionPar.label << "'" << std::endl;
+    std::cout << GridLogMessage << "Setting up "
+              << (mpcgPar.mixedPrecision ? "mixed-precision CG"
+                                          : "standard CG")
+              << " solver for action '" << actionPar.label << "'"
+              << std::endl;
     std::cout << GridLogMessage << "  Residual: " << mpcgPar.residual
               << std::endl;
 
-    mpcgSolvers[aIdx] =
-        makeMPCGSolver(actionMatsD[aIdx], actionMatsF[aIdx], false);
+    if (mpcgPar.mixedPrecision) {
+      cgSolvers[aIdx] =
+          makeMPCGSolver(actionMatsD[aIdx], actionMatsF[aIdx], false);
+    } else {
+      cgSolvers[aIdx] = makeCGSolver(actionMatsD[aIdx], false);
+    }
 
     std::cout << GridLogMessage << "Solvers created for action '"
               << actionPar.label << "'" << std::endl;
@@ -275,7 +323,7 @@ void computeHighModeCorrelators(
   };
 
   // Helper to resolve solver label to solver function
-  auto resolveSolver = [&lmaSolvers, &mpcgSolvers,
+  auto resolveSolver = [&lmaSolvers, &cgSolvers,
                         hasEigs](const std::string &solverName,
                                  size_t aIdx) -> SolverFunc * {
     if (solverName == "lma") {
@@ -286,7 +334,7 @@ void computeHighModeCorrelators(
       }
       return &lmaSolvers[aIdx];
     } else if (solverName == "mpcg") {
-      return &mpcgSolvers[aIdx];
+      return &cgSolvers[aIdx];
     } else {
       std::cerr << "ERROR: Unknown solver '" << solverName << "'" << std::endl;
       exit(1);
