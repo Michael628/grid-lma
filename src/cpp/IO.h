@@ -3,7 +3,7 @@
 
 #include <Grid/Grid.h>
 #include <Grid/algorithms/iterative/LocalCoherenceLanczos.h>
-#include <StagGamma.h>
+#include <GridMilc/GridMilc.h>
 
 NAMESPACE_BEGIN(Grid);
 

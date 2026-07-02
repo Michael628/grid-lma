@@ -5,7 +5,7 @@
 #include <Grid/Grid.h>
 #include <IO.h>
 #include <MesonFieldKernel.h>
-#include <StagGamma.h>
+#include <GridMilc/GridMilc.h>
 
 NAMESPACE_BEGIN(Grid);
 
@@ -49,7 +49,7 @@ void computeA2AMesonFields(
 
     std::vector<StagGamma::SpinTastePair> a2aGammas, gammaComms, gammaLocal;
     std::vector<std::vector<Real>> mom;
-    a2aGammas = StagGamma::ParseSpinTaste(a2aPar.spinTaste.gammas,
+    a2aGammas = StagGamma::ParseSpinTasteString(a2aPar.spinTaste.gammas,
                                           a2aPar.spinTaste.applyG5);
 
     gammaComms.clear();

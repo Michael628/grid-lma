@@ -5,7 +5,7 @@
 #include <Eigenpack.h>
 #include <Grid/Grid.h>
 #include <IO.h>
-#include <StagGamma.h>
+#include <GridMilc/GridMilc.h>
 #include <functional>
 #include <map>
 #include <tuple>
@@ -394,22 +394,22 @@ void computeHighModeCorrelators(
           std::cout << GridLogMessage << "Setting up meson contraction"
                     << std::endl;
 
-          auto quarkGammaKeys = StagGamma::ParseSpinTaste(corrPar.quark.gammas);
-          auto quarkGammaVals = StagGamma::ParseSpinTaste(
+          auto quarkGammaKeys = StagGamma::ParseSpinTasteString(corrPar.quark.gammas);
+          auto quarkGammaVals = StagGamma::ParseSpinTasteString(
               corrPar.quark.gammas, corrPar.quark.applyG5);
           GRID_ASSERT(!quarkGammaKeys.empty());
 
           auto antiquarkGammaKeys =
-              StagGamma::ParseSpinTaste(corrPar.antiquark.gammas);
-          auto antiquarkGammaVals = StagGamma::ParseSpinTaste(
+              StagGamma::ParseSpinTasteString(corrPar.antiquark.gammas);
+          auto antiquarkGammaVals = StagGamma::ParseSpinTasteString(
               corrPar.antiquark.gammas, corrPar.antiquark.applyG5);
           GRID_ASSERT(antiquarkGammaKeys.size() == 1);
           std::string antiquarkGammaName =
               StagGamma::GetName(antiquarkGammaKeys[0]);
           StagGamma::SpinTastePair antiquarkSpinTaste = antiquarkGammaVals[0];
 
-          auto sinkGammaKeys = StagGamma::ParseSpinTaste(corrPar.sink.gammas);
-          auto sinkGammaVals = StagGamma::ParseSpinTaste(corrPar.sink.gammas,
+          auto sinkGammaKeys = StagGamma::ParseSpinTasteString(corrPar.sink.gammas);
+          auto sinkGammaVals = StagGamma::ParseSpinTasteString(corrPar.sink.gammas,
                                                          corrPar.sink.applyG5);
           GRID_ASSERT(sinkGammaKeys.size() == quarkGammaKeys.size());
 

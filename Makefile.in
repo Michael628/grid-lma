@@ -20,7 +20,7 @@ INCLUDES := -I../src/cpp # Manually specify include dirs
 #
 CXXFLAGS= $(shell $(config) --cxxflags) -I$(gridinstall)/include $(OPTFLAGS) $(DEBUGFLAGS) $(A2A_BLOCKING_FLAGS)
 LDFLAGS=$(shell $(config) --ldflags)
-LIBS= $(shell $(config) --libs) -L$(gridinstall)/lib -lGrid
+LIBS= $(shell $(config) --libs) -L$(gridinstall)/lib -lGrid -lGridMilc
 COMPILER=$(shell $(config) --cxx)
 
 # GPUFLAGS=

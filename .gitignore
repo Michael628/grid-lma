@@ -10,3 +10,5 @@ configure~
 config.log
 config.status
 autom4te.cache/
+.pi*
+.rpiv

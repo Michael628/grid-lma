@@ -4,8 +4,7 @@
 #include <A2AMatrix.h>
 #include <Eigenpack.h>
 #include <IO.h>
-#include <StagGamma.h>
-#include <a2a/A2AWorker.h>
+#include <GridMilc/GridMilc.h>
 
 NAMESPACE_BEGIN(Grid);
 
