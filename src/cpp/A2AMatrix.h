@@ -32,7 +32,6 @@
 #include <Grid/Eigen/unsupported/CXX11/Tensor>
 #include <Grid/Grid.h>
 #include <IO.h>
-#include <TimerArray.h>
 #ifdef USE_MKL
 #include "mkl.h"
 #include "mkl_cblas.h"
@@ -162,8 +161,7 @@ public:
   // constructor
   A2AMatrixBlockComputation(GridBase *grid, const unsigned int orthogDim,
                             const unsigned int next, const unsigned int nstr,
-                            const unsigned int blockSize,
-                            TimerArray *tArray = nullptr);
+                            const unsigned int blockSize);
   // execution
   void execute(A2AKernel<T, Field> &kernel, A2AData<Field, MetadataType> &data);
 
@@ -172,7 +170,6 @@ private:
   void saveBlock(const A2AMatrixSet<TIo> &m, IoHelper &h);
 
 private:
-  TimerArray *_tArray;
   GridBase *_grid;
   unsigned int _orthogDim, _nt, _next, _nstr, _blockSize, _min_i, _min_j;
   std::vector<IoHelper> _nodeIo;
@@ -416,22 +413,9 @@ template <typename T, typename Field, typename MetadataType, typename TIo>
 A2AMatrixBlockComputation<T, Field, MetadataType, TIo>::
     A2AMatrixBlockComputation(GridBase *grid, const unsigned int orthogDim,
                               const unsigned int next, const unsigned int nstr,
-                              const unsigned int blockSize, TimerArray *tArray)
+                              const unsigned int blockSize)
     : _grid(grid), _nt(grid->GlobalDimensions()[orthogDim]),
-      _orthogDim(orthogDim), _next(next), _nstr(nstr), _blockSize(blockSize),
-      _tArray(tArray) {}
-
-#undef START_TIMER
-#undef STOP_TIMER
-#undef GET_TIMER
-
-#define START_TIMER(name)                                                      \
-  if (_tArray)                                                                 \
-  _tArray->startTimer(name)
-#define STOP_TIMER(name)                                                       \
-  if (_tArray)                                                                 \
-  _tArray->stopTimer(name)
-#define GET_TIMER(name) ((_tArray != nullptr) ? _tArray->getDTimer(name) : 0.)
+      _orthogDim(orthogDim), _next(next), _nstr(nstr), _blockSize(blockSize) {}
 
 // execution ///////////////////////////////////////////////////////////////////
 template <typename T, typename Field, typename MetadataType, typename TIo>
@@ -592,9 +576,7 @@ void A2AMatrixBlockComputation<T, Field, MetadataType, TIo>::execute(
       flops = 0.0;
       bytes = 0.0;
 
-      START_TIMER("kernel");
       kernel(mBlock, l_temp_e, l_temp_o, r_temp_e, r_temp_o);
-      STOP_TIMER("kernel");
 
       flops += kernel.flops(N_ii, N_jj, (low_j ? Ncb : 1) * (low_i ? Ncb : 1));
       bytes += kernel.bytes(N_ii, N_jj);
@@ -650,8 +632,7 @@ void A2AMatrixBlockComputation<T, Field, MetadataType, TIo>::execute(
       unsigned int myRank = _grid->ThisRank(), nRank = _grid->RankCount();
 
       std::cout << GridLogMessage << "Writing block to disk" << std::endl;
-      ioTime = -GET_TIMER("IO: write block");
-      START_TIMER("IO: total");
+      ioTime = -usecond();
       makeFileDir(data.filename(0, 0), _grid);
 
 #ifdef HADRONS_A2AM_PARALLEL_IO
@@ -678,10 +659,9 @@ void A2AMatrixBlockComputation<T, Field, MetadataType, TIo>::execute(
 #else
       assert(0);
 #endif
-      STOP_TIMER("IO: total");
       blockSize =
           static_cast<double>(_next * _nstr * _nt * N_ii * N_jj * sizeof(TIo));
-      ioTime += GET_TIMER("IO: write block");
+      ioTime += usecond();
       std::cout << GridLogMessage << "HDF5 IO done " << sizeString(blockSize)
                 << " in " << ioTime << " us ("
                 << blockSize / ioTime * 1.0e6 / 1024 / 1024 << " MB/s)"
@@ -711,18 +691,10 @@ template <typename T, typename Field, typename MetadataType, typename TIo>
 void A2AMatrixBlockComputation<T, Field, MetadataType, TIo>::saveBlock(
     const A2AMatrixSet<TIo> &m, IoHelper &h) {
   if ((h.i == 0) and (h.j == 0)) {
-    START_TIMER("IO: file creation");
     h.io.initFile(h.md, _min_i, _min_j);
-    STOP_TIMER("IO: file creation");
   }
-  START_TIMER("IO: write block");
   h.io.saveBlock(m, h.e, h.s, h.i, h.j);
-  STOP_TIMER("IO: write block");
 }
-
-#undef START_TIMER
-#undef STOP_TIMER
-#undef GET_TIMER
 
 NAMESPACE_END(Grid)
 

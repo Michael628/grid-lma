@@ -40,7 +40,7 @@ test_irl_leak: ../src/Test_irl_leak.cc
 	$(COMPILER) $(INCLUDES) -o $@ $(CXXFLAGS) ../src/Test_irl_leak.cc $(LDFLAGS) $(LIBS)
 
 grid_lma: ../src/Grid_LMA.cc
-	$(COMPILER) $(INCLUDES) -o $@ $(GPUFLAGS) $(CXXFLAGS)  ../src/Grid_LMA.cc ../src/cpp/TimerArray.cc ../src/cpp/IO.cc  $(LDFLAGS) $(LIBS)
+	$(COMPILER) $(INCLUDES) -o $@ $(GPUFLAGS) $(CXXFLAGS)  ../src/Grid_LMA.cc ../src/cpp/IO.cc  $(LDFLAGS) $(LIBS)
 
 grid_milc_to_ildg: ../src/Grid_MilcToIldg.cc
 	$(COMPILER) $(INCLUDES) -o $@ $(GPUFLAGS) $(CXXFLAGS) ../src/Grid_MilcToIldg.cc ../src/cpp/IO.cc $(LDFLAGS) $(LIBS)
