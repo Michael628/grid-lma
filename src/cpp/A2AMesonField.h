@@ -3,6 +3,7 @@
 
 #include <Eigenpack.h>
 #include <Grid/Grid.h>
+#include <GaugeBC.h>
 #include <IO.h>
 #include <MesonFieldKernel.h>
 #include <GridMilc/GridMilc.h>
@@ -25,6 +26,21 @@ void computeA2AMesonFields(
 
   bool hasEigs = (epack != nullptr);
   int Nt = UGrid->GlobalDimensions()[Tp];
+
+  // Thin gauge field with APBC in time for the non-local spin-taste covariant
+  // shifts inside the A2A one-link kernel. The fat/long links used by the
+  // Dirac operator already carry APBC from the MILC-generated files; the
+  // thin links are periodic as loaded, so the matching boundary phase is
+  // applied to the copy handed to the kernel. U itself stays periodic.
+  // Lifetime: the A2ATaskOnelink extracts its link fields at construction,
+  // so the function-scope copy safely outlives every kernel execution.
+  LatticeGaugeFieldD U_apbc(UGrid);
+  U_apbc = U;
+  applyAPBC(U_apbc);
+  std::cout << GridLogMessage
+            << "Applied APBC (time) to thin links for spin-taste covariant "
+               "shifts"
+            << std::endl;
 
   for (size_t a2aIdx = 0; a2aIdx < inputParams.a2a.size(); ++a2aIdx) {
     auto &a2aPar = inputParams.a2a[a2aIdx];
@@ -146,7 +162,7 @@ void computeA2AMesonFields(
     }
     if (gammaComms.size() > 0) {
       mesonData.setGammas(gammaComms);
-      kernel.setWorker(UGrid, *ph, gammaComms, orthogDir, &U);
+      kernel.setWorker(UGrid, *ph, gammaComms, orthogDir, &U_apbc);
       computationComms->execute(kernel, mesonData);
     }
     std::cout << GridLogMessage

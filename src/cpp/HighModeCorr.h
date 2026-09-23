@@ -4,6 +4,7 @@
 #include <DilutedNoise.h>
 #include <Eigenpack.h>
 #include <Grid/Grid.h>
+#include <GaugeBC.h>
 #include <IO.h>
 #include <GridMilc/GridMilc.h>
 #include <functional>
@@ -30,6 +31,20 @@ void computeHighModeCorrelators(
   bool hasEigs = (epack != nullptr);
   int Nt = UGrid->GlobalDimensions()[Tp];
   int traj = inputParams.trajectory;
+
+  // Thin gauge field with APBC in time for non-local spin-taste covariant
+  // shifts. The fat/long links used by the Dirac operator already carry
+  // APBC from the MILC-generated files; the thin links loaded from the base
+  // config are periodic, so the matching boundary phase is applied to the
+  // copy consumed by StagGamma. U itself stays periodic (the U parameter is
+  // retained in the signature as the PBC input from which U_apbc derives).
+  LatticeGaugeFieldD U_apbc(UGrid);
+  U_apbc = U;
+  applyAPBC(U_apbc);
+  std::cout << GridLogMessage
+            << "Applied APBC (time) to thin links for spin-taste covariant "
+               "shifts"
+            << std::endl;
 
   // Action factory
   auto makeAction = [&](auto &action, const ImprovedStaggeredPar &actionPar) {
@@ -430,14 +445,14 @@ void computeHighModeCorrelators(
 
           // Lambda to solve a set of gammas with a given action+solver
           auto doSolves = [&propCache, &lmaPropCache, &randomWallSource,
-                           &solveGammas, fermIn, fermOut, fermGuess, &U, UGrid,
-                           &lmaSolvers, hasEigs](
+                           &solveGammas, fermIn, fermOut, fermGuess,
+                           &U_apbc, UGrid, &lmaSolvers, hasEigs](
                               const std::string &actionLabel, size_t aIdx,
                               const std::string &solverType, SolverFunc &solver,
                               const std::vector<StagGamma::SpinTastePair>
                                   &gammaKeys) {
             StagGamma gamma;
-            gamma.setGaugeField(U);
+            gamma.setGaugeField(U_apbc);
             PropagatorFieldD gammaProp(UGrid);
 
             for (const auto &gKey : gammaKeys) {
@@ -542,7 +557,7 @@ void computeHighModeCorrelators(
           // Contract
           {
             StagGamma gamma;
-            gamma.setGaugeField(U);
+            gamma.setGaugeField(U_apbc);
             PropagatorFieldD gammaProp(UGrid);
 
             for (size_t gi = 0; gi < mesonResults.size(); ++gi) {
