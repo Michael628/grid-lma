@@ -575,6 +575,20 @@ void computeHighModeCorrelators(
                                   corrPar.antiquarkSolver, antiquarkGammaName);
 
               PropagatorFieldD prod(UGrid);
+              // HadronsMILC-consistent contraction ordering (empirically
+              // verified 2026-09-24): apply the sink gamma to the
+              // quark-keyed propagator and contract with the antiquark-
+              // keyed propagator standing alone on the left. This
+              // reproduces HadronsMILC's Meson::contract trace exactly --
+              // grid_lma's quark/antiquark cache keys map onto
+              // HadronsMILC's source/sink slots opposite to the apparent
+              // naming. Swapping the operands yields the exact complex
+              // conjugate (|fresh - conj(ref)| <= 3.3e-16 over all 32
+              // ranLL files). Do NOT "fix" Im-sign issues by
+              // conjugating the finished trace: that only agrees for
+              // Hermitian zero-momentum sinks and is wrong for nonzero
+              // sink momentum, unequal quark/antiquark actions, or
+              // non-Hermitian sink operators.
               gamma(gammaProp, propCache.at(quarkKey));
               prod = propCache.at(antiquarkKey) * adj(gammaProp);
 
